@@ -1,0 +1,12 @@
+# Local planning documents
+/.scratch/
+
+# Local implementation guidance
+/docs/
+/AGENTS.md
+
+.env
+.env.*
+!.env.example
+
+dist/
