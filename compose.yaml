@@ -1,0 +1,97 @@
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: commandix
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Copy .env.example to .env}
+      MIGRATION_PASSWORD: ${MIGRATION_PASSWORD:?Set MIGRATION_PASSWORD}
+      RUNTIME_PASSWORD: ${RUNTIME_PASSWORD:?Set RUNTIME_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U postgres -d commandix"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  rabbitmq:
+    image: rabbitmq:4.1-management
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:?Set RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Set RABBITMQ_PASSWORD}
+    ports:
+      - "127.0.0.1:${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: [CMD, rabbitmq-diagnostics, -q, check_running]
+      interval: 3s
+      timeout: 5s
+      retries: 30
+  migrate:
+    build:
+      context: .
+      target: server
+    command: [bun, run, db:migrate]
+    environment:
+      DATABASE_URL: postgresql://commandix_migrator:${MIGRATION_PASSWORD}@postgres:5432/commandix
+    depends_on:
+      postgres:
+        condition: service_healthy
+  seed:
+    build:
+      context: .
+      target: server
+    command: [bun, run, db:seed]
+    environment:
+      DATABASE_URL: postgresql://commandix_runtime:${RUNTIME_PASSWORD}@postgres:5432/commandix
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  api:
+    build:
+      context: .
+      target: server
+    command: [bun, apps/api/src/main.ts]
+    environment: &runtime-environment
+      DATABASE_URL: postgresql://commandix_runtime:${RUNTIME_PASSWORD}@postgres:5432/commandix
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
+    depends_on: &application-dependencies
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          CMD,
+          bun,
+          -e,
+          'fetch("http://127.0.0.1:3000/health").then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))',
+        ]
+      interval: 5s
+      timeout: 4s
+      retries: 5
+    init: true
+  worker:
+    build:
+      context: .
+      target: server
+    command: [bun, apps/worker/src/main.ts]
+    environment: *runtime-environment
+    depends_on: *application-dependencies
+    init: true
+  web:
+    build:
+      context: .
+      target: web
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  postgres-data:
+  rabbitmq-data:

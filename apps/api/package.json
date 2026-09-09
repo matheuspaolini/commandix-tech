@@ -1,0 +1,31 @@
+{
+  "name": "@commandix/api",
+  "private": true,
+  "dependencies": {
+    "@nestjs/common": "catalog:",
+    "@nestjs/core": "catalog:",
+    "@nestjs/platform-express": "^11.1.0",
+    "amqplib": "^0.10.9",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.2",
+    "express": "^5.1.0",
+    "pg": "catalog:",
+    "reflect-metadata": "catalog:",
+    "rxjs": "catalog:"
+  },
+  "scripts": {
+    "typecheck": "bun --bun tsc -p tsconfig.json",
+    "start": "bun src/main.ts",
+    "dev": "bun --watch src/main.ts",
+    "test": "bun test ./test"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/amqplib": "^0.10.7",
+    "@types/express": "^5.0.0",
+    "@types/pg": "catalog:",
+    "@types/supertest": "^6.0.0",
+    "supertest": "^7.1.0"
+  }
+}

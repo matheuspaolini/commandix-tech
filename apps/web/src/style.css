@@ -1,0 +1,90 @@
+:root {
+  color: #242b32;
+  background: #f6f3ec;
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+}
+header,
+main,
+footer {
+  width: min(100% - 3rem, 68rem);
+  margin-inline: auto;
+}
+header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 2rem;
+  border-bottom: 1px solid #d4d0c5;
+}
+a {
+  color: #233e59;
+  text-decoration: none;
+  font-size: 1.25rem;
+  font-weight: 650;
+}
+a:focus-visible {
+  outline: 2px solid #233e59;
+  outline-offset: 6px;
+}
+header span,
+footer {
+  font-size: 0.875rem;
+  color: #626971;
+}
+main {
+  min-height: calc(100svh - 12rem);
+  padding-block: clamp(3rem, 9vw, 7rem);
+}
+h1,
+h2 {
+  font-family:
+    "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
+  font-weight: 400;
+}
+h1 {
+  max-width: 14ch;
+  font-size: clamp(2.8rem, 6vw, 5rem);
+  line-height: 1.08;
+  margin: 0 0 1.5rem;
+  letter-spacing: -0.035em;
+}
+p {
+  max-width: 56ch;
+  line-height: 1.65;
+}
+.intro {
+  font-size: 1.125rem;
+  color: #626971;
+}
+section {
+  border-left: 3px solid #233e59;
+  padding-left: 1.5rem;
+  margin-top: 3.5rem;
+}
+h2 {
+  font-size: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+.status {
+  font-size: 0.875rem;
+  color: #233e59;
+  margin-top: 1.5rem;
+}
+footer {
+  border-top: 1px solid #d4d0c5;
+  padding-block: 1.5rem;
+}
+@media (max-width: 420px) {
+  header {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}

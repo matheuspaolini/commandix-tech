@@ -1,0 +1,20 @@
+{
+  "name": "@commandix/web",
+  "private": true,
+  "scripts": {
+    "dev": "bun --bun vite --host 0.0.0.0",
+    "build": "bun --bun vite build",
+    "typecheck": "bun --bun tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "vite": "^7.1.0",
+    "typescript": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
+  }
+}

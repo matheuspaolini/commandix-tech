@@ -1,0 +1,10 @@
+.git
+.scratch
+docs
+AGENTS.md
+.env
+.env.*
+node_modules
+**/node_modules
+dist
+**/dist

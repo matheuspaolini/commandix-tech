@@ -1,0 +1,19 @@
+{
+  "name": "@commandix/worker",
+  "private": true,
+  "dependencies": {
+    "@nestjs/common": "catalog:",
+    "@nestjs/core": "catalog:",
+    "reflect-metadata": "catalog:",
+    "rxjs": "catalog:"
+  },
+  "scripts": {
+    "typecheck": "bun --bun tsc -p tsconfig.json",
+    "start": "bun src/main.ts",
+    "dev": "bun --watch src/main.ts"
+  },
+  "devDependencies": {
+    "typescript": "catalog:",
+    "@types/bun": "catalog:"
+  }
+}

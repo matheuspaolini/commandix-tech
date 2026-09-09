@@ -10,3 +10,6 @@
 !.env.example
 
 dist/
+
+node_modules/
+coverage/
