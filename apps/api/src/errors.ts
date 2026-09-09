@@ -17,7 +17,7 @@ export class SanitizedErrors implements ExceptionFilter {
     response.status(statusCode).json({
       statusCode,
       error: STATUS_CODES[statusCode] ?? "Internal Server Error",
-      correlationId: requestContext.getStore()?.correlationId,
+      correlationId: requestContext.correlationId(),
     });
   }
 }

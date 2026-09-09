@@ -1,189 +1,416 @@
-import { afterAll as after, beforeAll as before, test } from "bun:test";
-import assert from "node:assert/strict";
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import {
   Body,
   Controller,
   Get,
-  INestApplication,
+  type INestApplication,
   Module,
   Post,
 } from "@nestjs/common";
 import { IsString } from "class-validator";
 import request from "supertest";
+
 import { AppModule, createApp } from "../src/app";
+
+Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
+
+const ACCEPTED_CORRELATION_ID = "ae68edcd-e14f-4e0f-8a56-0c61d91b069e";
+const UPPERCASE_CORRELATION_ID = "AE68EDCD-E14F-4E0F-8A56-0C61D91B069E";
+const PRIVATE_VALUES = /secret-password|snapshot-private-value|stack/;
+const MALFORMED_PRIVATE_VALUES = /secret-password|stack/;
+const UUID_V4 =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+const invalidProbeBodies = [
+  ["unknown properties", { name: "valid", extra: true }],
+  ["implicit scalar conversion", { name: 123 }],
+  ["missing required properties", {}],
+] as const;
 
 class ProbeDto {
   @IsString()
   name!: string;
 }
+
 @Controller("test-only")
 class ProbeController {
   @Post()
   validate(@Body() body: ProbeDto) {
     return body;
   }
+
   @Get("unexpected")
   unexpected() {
     throw new Error("secret-password snapshot-private-value");
   }
 }
+
 @Module({ imports: [AppModule], controllers: [ProbeController] })
 class TestModule {}
 
 const logs: string[] = [];
 let app: INestApplication;
-before(async () => {
-  app = await createApp(TestModule, (line) => logs.push(line));
-  await app.init();
-});
-after(async () => {
-  await app?.close();
-});
 
-test("health verifies the database and broker", async () => {
-  const response = await request(app.getHttpServer()).get("/health");
-  assert.equal(response.status, 200);
-  assert.deepEqual(response.body, {
-    status: "ok",
-    dependencies: { database: "up", broker: "up" },
-  });
-});
+function get(path: string) {
+  return request(app.getHttpServer()).get(path);
+}
 
-test("requests generate and return a correlation UUID", async () => {
-  const response = await request(app.getHttpServer()).get("/health");
-  assert.match(
-    response.headers["x-correlation-id"] ?? "",
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-  );
-});
+function post(path: string) {
+  return request(app.getHttpServer()).post(path);
+}
 
-test("invalid DTOs return sanitized correlated errors", async () => {
-  const correlationId = "ae68edcd-e14f-4e0f-8a56-0c61d91b069e";
-  const response = await request(app.getHttpServer())
-    .post("/test-only")
-    .set("x-correlation-id", correlationId)
+function recordLog(line: string): void {
+  logs.push(line);
+}
+
+function parseLog(line: string): Record<string, unknown> {
+  return JSON.parse(line) as Record<string, unknown>;
+}
+
+function captureNewLogs(startIndex: number): string[] {
+  return logs.slice(startIndex);
+}
+
+function lastCapturedLog(capturedLogs: string[]): Record<string, unknown> {
+  const line = capturedLogs.at(-1);
+  if (!line) throw new Error("Expected the request to produce an HTTP log");
+
+  return parseLog(line);
+}
+
+async function createHealthScenario() {
+  const response = await get("/health");
+
+  return {
+    status: response.status,
+    body: response.body,
+    correlationId: response.headers["x-correlation-id"] ?? "",
+  };
+}
+
+async function createValidationErrorScenario() {
+  const logStart = logs.length;
+  const response = await post("/test-only")
+    .set("x-correlation-id", ACCEPTED_CORRELATION_ID)
     .send({
       name: { password: "secret-password" },
       snapshot: "snapshot-private-value",
     });
-  assert.equal(response.status, 400);
-  assert.deepEqual(response.body, {
-    statusCode: 400,
-    error: "Bad Request",
-    correlationId,
-  });
-  assert.equal(response.headers["x-correlation-id"], correlationId);
-  const log = JSON.parse(logs.at(-1)!);
-  assert.equal(log.correlationId, correlationId);
-  assert.equal(log.statusCode, 400);
-  assert.doesNotMatch(
-    logs.join("\n"),
-    /secret-password|snapshot-private-value|stack/,
-  );
-});
+  const capturedLogs = captureNewLogs(logStart);
 
-test("unexpected exceptions omit internal messages and stacks", async () => {
-  const response = await request(app.getHttpServer())
-    .get("/test-only/unexpected?token=secret-password")
+  return {
+    status: response.status,
+    body: response.body,
+    responseCorrelationId: response.headers["x-correlation-id"],
+    log: lastCapturedLog(capturedLogs),
+    serializedOutput: JSON.stringify(response.body) + capturedLogs.join("\n"),
+  };
+}
+
+async function createUnexpectedErrorScenario() {
+  const logStart = logs.length;
+  const response = await get("/test-only/unexpected?token=secret-password")
     .set("authorization", "Bearer secret-password")
     .set("cookie", "refresh=secret-password");
-  assert.equal(response.status, 500);
-  assert.deepEqual(response.body, {
-    statusCode: 500,
-    error: "Internal Server Error",
-    correlationId: response.headers["x-correlation-id"],
-  });
-  const log = JSON.parse(logs.at(-1)!);
-  assert.equal(log.correlationId, response.body.correlationId);
-  assert.equal(log.statusCode, 500);
-  assert.doesNotMatch(
-    JSON.stringify(response.body) + logs.join("\n"),
-    /secret-password|snapshot-private-value|stack/,
+  const capturedLogs = captureNewLogs(logStart);
+
+  return {
+    status: response.status,
+    body: response.body,
+    responseCorrelationId: response.headers["x-correlation-id"],
+    log: lastCapturedLog(capturedLogs),
+    serializedOutput: JSON.stringify(response.body) + capturedLogs.join("\n"),
+  };
+}
+
+async function createAcceptedCorrelationScenario() {
+  const logStart = logs.length;
+  const response = await get("/health").set(
+    "x-correlation-id",
+    UPPERCASE_CORRELATION_ID,
   );
-});
+  const capturedLogs = captureNewLogs(logStart);
 
-test("accepted IDs propagate through a successful request and JSON log", async () => {
-  const correlationId = "AE68EDCD-E14F-4E0F-8A56-0C61D91B069E";
-  const response = await request(app.getHttpServer())
-    .get("/health")
-    .set("x-correlation-id", correlationId);
-  assert.equal(response.status, 200);
-  assert.equal(response.headers["x-correlation-id"], correlationId);
-  const log = JSON.parse(logs.at(-1)!);
-  assert.equal(log.correlationId, correlationId);
-  assert.equal(log.route, "/health");
-  assert.equal(log.event, "http_request");
-});
+  return {
+    status: response.status,
+    responseCorrelationId: response.headers["x-correlation-id"],
+    log: lastCapturedLog(capturedLogs),
+  };
+}
 
-test("unaccepted IDs are replaced and unmatched URLs are not logged", async () => {
-  const response = await request(app.getHttpServer())
-    .get("/secret-password?value=snapshot-private-value")
-    .set("x-correlation-id", "secret-password");
-  assert.equal(response.status, 404);
-  assert.match(response.headers["x-correlation-id"] ?? "", /^[0-9a-f-]{36}$/);
-  assert.equal(
-    response.body.correlationId,
-    response.headers["x-correlation-id"],
-  );
-  assert.equal(JSON.parse(logs.at(-1)!).route, "unmatched");
-  assert.doesNotMatch(
-    logs.join("\n"),
-    /secret-password|snapshot-private-value/,
-  );
-});
+async function createRejectedCorrelationScenario() {
+  const logStart = logs.length;
+  const response = await get(
+    "/secret-password?value=snapshot-private-value",
+  ).set("x-correlation-id", "secret-password");
+  const capturedLogs = captureNewLogs(logStart);
 
-test("validation rejects unknown properties and implicit scalar conversion", async () => {
-  for (const body of [{ name: "valid", extra: true }, { name: 123 }, {}]) {
-    const response = await request(app.getHttpServer())
-      .post("/test-only")
-      .send(body);
-    assert.equal(response.status, 400);
-  }
-  const valid = await request(app.getHttpServer())
-    .post("/test-only")
-    .send({ name: "valid" });
-  assert.equal(valid.status, 201);
-  assert.deepEqual(valid.body, { name: "valid" });
-});
+  return {
+    status: response.status,
+    bodyCorrelationId: response.body.correlationId,
+    responseCorrelationId: response.headers["x-correlation-id"] ?? "",
+    log: lastCapturedLog(capturedLogs),
+    serializedLogs: capturedLogs.join("\n"),
+  };
+}
 
-test("malformed JSON still receives a sanitized correlated error", async () => {
-  const response = await request(app.getHttpServer())
-    .post("/test-only")
+async function createMalformedJsonScenario() {
+  const logStart = logs.length;
+  const response = await post("/test-only")
     .set("Content-Type", "application/json")
     .send('{"secret-password":');
-  assert.equal(response.status, 400);
-  assert.equal(
-    response.body.correlationId,
-    response.headers["x-correlation-id"],
-  );
-  assert.equal(
-    JSON.parse(logs.at(-1)!).correlationId,
-    response.body.correlationId,
-  );
-  assert.doesNotMatch(
-    JSON.stringify(response.body) + logs.join("\n"),
-    /secret-password|stack/,
-  );
-});
+  const capturedLogs = captureNewLogs(logStart);
 
-test("production does not expose test-only routes", async () => {
-  const production = await createApp(AppModule, () => {});
-  await production.init();
+  return {
+    status: response.status,
+    body: response.body,
+    bodyCorrelationId: response.body.correlationId,
+    responseCorrelationId: response.headers["x-correlation-id"],
+    log: lastCapturedLog(capturedLogs),
+    serializedOutput: JSON.stringify(response.body) + capturedLogs.join("\n"),
+  };
+}
+
+async function probeProductionOnlyRoutes() {
+  const production = await createApp({
+    rootModule: AppModule,
+    writeLog: () => {},
+  });
+
   try {
-    assert.equal(
-      (
-        await request(production.getHttpServer())
-          .post("/test-only")
-          .send({ name: "valid" })
-      ).status,
-      404,
+    await production.init();
+    const postResponse = await request(production.getHttpServer())
+      .post("/test-only")
+      .send({ name: "valid" });
+    const getResponse = await request(production.getHttpServer()).get(
+      "/test-only/unexpected",
     );
-    assert.equal(
-      (await request(production.getHttpServer()).get("/test-only/unexpected"))
-        .status,
-      404,
-    );
+
+    return [postResponse.status, getResponse.status];
   } finally {
     await production.close();
   }
+}
+
+type HealthScenario = Awaited<ReturnType<typeof createHealthScenario>>;
+type ValidationErrorScenario = Awaited<
+  ReturnType<typeof createValidationErrorScenario>
+>;
+type UnexpectedErrorScenario = Awaited<
+  ReturnType<typeof createUnexpectedErrorScenario>
+>;
+type AcceptedCorrelationScenario = Awaited<
+  ReturnType<typeof createAcceptedCorrelationScenario>
+>;
+type RejectedCorrelationScenario = Awaited<
+  ReturnType<typeof createRejectedCorrelationScenario>
+>;
+type MalformedJsonScenario = Awaited<
+  ReturnType<typeof createMalformedJsonScenario>
+>;
+
+beforeAll(async () => {
+  app = await createApp({
+    rootModule: TestModule,
+    writeLog: recordLog,
+  });
+  await app.init();
+});
+
+afterAll(async () => {
+  await app?.close();
+});
+
+describe("health", () => {
+  let scenario: HealthScenario;
+
+  beforeAll(async () => {
+    scenario = await createHealthScenario();
+  });
+
+  test("returns HTTP 200", () => {
+    expect(scenario.status).toBe(200);
+  });
+
+  test("reports healthy dependencies", () => {
+    expect(scenario.body).toStrictEqual({
+      status: "ok",
+      dependencies: { database: "up", broker: "up" },
+    });
+  });
+
+  test("generates a correlation UUID", () => {
+    expect(scenario.correlationId).toMatch(UUID_V4);
+  });
+});
+
+describe("sanitized validation errors", () => {
+  let scenario: ValidationErrorScenario;
+
+  beforeAll(async () => {
+    scenario = await createValidationErrorScenario();
+  });
+
+  test("returns HTTP 400", () => {
+    expect(scenario.status).toBe(400);
+  });
+
+  test("returns a sanitized correlated body", () => {
+    expect(scenario.body).toStrictEqual({
+      statusCode: 400,
+      error: "Bad Request",
+      correlationId: ACCEPTED_CORRELATION_ID,
+    });
+  });
+
+  test("returns the accepted correlation ID header", () => {
+    expect(scenario.responseCorrelationId).toBe(ACCEPTED_CORRELATION_ID);
+  });
+
+  test("records the correlation ID and status", () => {
+    expect(scenario.log).toMatchObject({
+      correlationId: ACCEPTED_CORRELATION_ID,
+      statusCode: 400,
+    });
+  });
+
+  test("does not expose private values", () => {
+    expect(scenario.serializedOutput).not.toMatch(PRIVATE_VALUES);
+  });
+});
+
+describe("unexpected errors", () => {
+  let scenario: UnexpectedErrorScenario;
+
+  beforeAll(async () => {
+    scenario = await createUnexpectedErrorScenario();
+  });
+
+  test("returns HTTP 500", () => {
+    expect(scenario.status).toBe(500);
+  });
+
+  test("returns a sanitized correlated body", () => {
+    expect(scenario.body).toStrictEqual({
+      statusCode: 500,
+      error: "Internal Server Error",
+      correlationId: scenario.responseCorrelationId,
+    });
+  });
+
+  test("records the response correlation ID", () => {
+    expect(scenario.log.correlationId).toBe(scenario.body.correlationId);
+  });
+
+  test("records HTTP 500", () => {
+    expect(scenario.log.statusCode).toBe(500);
+  });
+
+  test("does not expose private values", () => {
+    expect(scenario.serializedOutput).not.toMatch(PRIVATE_VALUES);
+  });
+});
+
+describe("accepted correlation IDs", () => {
+  let scenario: AcceptedCorrelationScenario;
+
+  beforeAll(async () => {
+    scenario = await createAcceptedCorrelationScenario();
+  });
+
+  test("returns HTTP 200", () => {
+    expect(scenario.status).toBe(200);
+  });
+
+  test("preserves the accepted response header", () => {
+    expect(scenario.responseCorrelationId).toBe(UPPERCASE_CORRELATION_ID);
+  });
+
+  test("propagates the ID into the request log", () => {
+    expect(scenario.log.correlationId).toBe(UPPERCASE_CORRELATION_ID);
+  });
+
+  test("records the matched route", () => {
+    expect(scenario.log).toMatchObject({
+      event: "http_request",
+      route: "/health",
+    });
+  });
+});
+
+describe("rejected correlation IDs and unmatched routes", () => {
+  let scenario: RejectedCorrelationScenario;
+
+  beforeAll(async () => {
+    scenario = await createRejectedCorrelationScenario();
+  });
+
+  test("returns HTTP 404", () => {
+    expect(scenario.status).toBe(404);
+  });
+
+  test("generates a replacement correlation ID", () => {
+    expect(scenario.responseCorrelationId).toMatch(UUID_V4);
+  });
+
+  test("uses the replacement ID in the response body", () => {
+    expect(scenario.bodyCorrelationId).toBe(scenario.responseCorrelationId);
+  });
+
+  test("records the route as unmatched", () => {
+    expect(scenario.log.route).toBe("unmatched");
+  });
+
+  test("does not log private URL or header values", () => {
+    expect(scenario.serializedLogs).not.toMatch(
+      /secret-password|snapshot-private-value/,
+    );
+  });
+});
+
+describe("DTO validation", () => {
+  for (const [validationCase, body] of invalidProbeBodies) {
+    test(`rejects ${validationCase}`, async () => {
+      const response = await post("/test-only").send(body);
+      expect(response.status).toBe(400);
+    });
+  }
+
+  test("accepts a valid DTO", async () => {
+    const response = await post("/test-only").send({ name: "valid" });
+
+    expect({ status: response.status, body: response.body }).toStrictEqual({
+      status: 201,
+      body: { name: "valid" },
+    });
+  });
+});
+
+describe("malformed JSON", () => {
+  let scenario: MalformedJsonScenario;
+
+  beforeAll(async () => {
+    scenario = await createMalformedJsonScenario();
+  });
+
+  test("returns HTTP 400", () => {
+    expect(scenario.status).toBe(400);
+  });
+
+  test("uses the response correlation ID in the body", () => {
+    expect(scenario.bodyCorrelationId).toBe(scenario.responseCorrelationId);
+  });
+
+  test("uses the body correlation ID in the request log", () => {
+    expect(scenario.log.correlationId).toBe(scenario.bodyCorrelationId);
+  });
+
+  test("does not expose private values", () => {
+    expect(scenario.serializedOutput).not.toMatch(MALFORMED_PRIVATE_VALUES);
+  });
+});
+
+test("production does not expose test-only routes", async () => {
+  const statuses = await probeProductionOnlyRoutes();
+  expect(statuses).toStrictEqual([404, 404]);
 });

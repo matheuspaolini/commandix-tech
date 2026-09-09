@@ -3,8 +3,8 @@
 A contract workspace built with a modular NestJS API, a separate NestJS worker,
 React/TypeScript, PostgreSQL/Prisma, and RabbitMQ. Bun 1.4.0 runs the backend,
 manages packages/workspaces, and executes tools and tests. This baseline provides a visible workspace shell,
-dependency health, correlated JSON request logs, and sanitized HTTP errors.
-Contract operations and authentication are introduced in later slices.
+dependency health, correlated JSON request logs, sanitized HTTP errors, and
+tenant-scoped Admin authentication. Contract operations are introduced in later slices.
 
 Backend TypeScript runs directly in Bun; TypeScript checks types without emitting
 JavaScript, and Vite builds browser assets served by Nginx. A Node installation is
@@ -107,6 +107,38 @@ availability without these details.
 The validation/error demonstration routes exist exclusively in the test module;
 production exposes only health in this slice.
 
+## Onboarding and authentication
+
+Onboarding is API-only in this slice. It atomically creates one Tenant and its
+initial Admin; it does not sign that Admin in:
+
+```sh
+curl -i http://localhost:8080/api/onboarding \
+  -H 'content-type: application/json' \
+  --data '{"slug":"acme-north","email":"admin@example.com","password":"correct horse battery staple"}'
+```
+
+Slug and email are trimmed and lowercased. Slugs must be 3–63 lowercase
+alphanumeric/hyphen characters without leading, trailing, or repeated hyphens.
+Emails use standard email validation after canonicalization. Passwords are kept
+exactly as entered, must contain 12–128 Unicode code points, and cannot be only
+whitespace. Duplicate canonical slugs return `409`; malformed input returns `400`.
+
+Log in with the same three fields to receive a 15-minute access token:
+
+```sh
+token=$(curl -s http://localhost:8080/api/auth/login \
+  -H 'content-type: application/json' \
+  --data '{"slug":"acme-north","email":"admin@example.com","password":"correct horse battery staple"}' \
+  | bun -e 'console.log((await Bun.stdin.json()).accessToken)')
+curl -i http://localhost:8080/api/auth/identity -H "authorization: Bearer $token"
+```
+
+All unknown-tenant, unknown-email, and wrong-password attempts return the same
+`401` response. Browser access tokens remain in React memory only; expiry returns
+the user to login. Refresh tokens and logout belong to ticket 04. `JWT_SECRET`
+must be at least 32 characters and is required by the API runtime.
+
 ## Develop and verify
 
 Install Bun 1.4.0 for host commands (Docker Compose and Bash are also needed for
@@ -133,6 +165,7 @@ For an individual HTTP test file against existing reachable development dependen
 ```sh
 export DATABASE_URL='postgresql://commandix_runtime:local_runtime_password@localhost:5432/commandix'
 export RABBITMQ_URL='amqp://commandix:local_broker_password@localhost:5672'
+export JWT_SECRET='local_development_jwt_secret_32_chars'
 bun run test
 # Or select a test directly from TypeScript:
 bun test apps/api/test/http.test.ts --test-name-pattern='invalid DTO'
@@ -177,12 +210,11 @@ routes. Compose smoke tests cover actual dependency failures and restoration.
 
 ## Architecture and limits
 
-The API will own Auth, Tenant, and Contract modules, with framework-independent
-domain behavior, explicit use cases, and persistence adapters. The worker will own
-outbox publication and notification consumption. This slice keeps the worker idle;
-no queues, consumers, business endpoints, schema, or seed users are installed yet.
-Future activation delivery uses a transactional outbox, one publisher, and
-idempotent notification persistence. Authentication, tenant enforcement, immutable
-history, and contract screens arrive in their introducing slices. OpenTelemetry
-is deferred. The Compose setup is intended for local development, not deployment
-with public credentials or exposed production services.
+The API owns Auth and Tenant modules with framework-independent normalization,
+password, token, onboarding, and persistence seams. The worker remains idle; no
+queues, consumers, contract endpoints, or seed users are installed yet. Future
+activation delivery uses a transactional outbox, one publisher, and idempotent
+notification persistence. Contract screens, refresh sessions, tenant enforcement
+for later domain resources, and immutable history arrive in their introducing
+slices. OpenTelemetry is deferred. The Compose setup is intended for local
+development, not deployment with public credentials or exposed production services.

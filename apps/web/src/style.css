@@ -43,8 +43,7 @@ main {
   min-height: calc(100svh - 12rem);
   padding-block: clamp(3rem, 9vw, 7rem);
 }
-h1,
-h2 {
+h1 {
   font-family:
     "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, serif;
   font-weight: 400;
@@ -69,14 +68,65 @@ section {
   padding-left: 1.5rem;
   margin-top: 3.5rem;
 }
-h2 {
-  font-size: 1.5rem;
-  margin-bottom: 0.5rem;
+.sign-in-main {
+  display: grid;
+  place-items: start center;
 }
-.status {
-  font-size: 0.875rem;
+.sign-in-card {
+  width: min(100%, 31rem);
+  border: 1px solid #d4d0c5;
+  border-left: 3px solid #233e59;
+  padding: clamp(1.5rem, 5vw, 3rem);
+  margin-top: 0;
+  background: #fbf9f3;
+}
+.eyebrow {
+  margin: 0 0 0.75rem;
   color: #233e59;
-  margin-top: 1.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+form {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 2rem;
+}
+label {
+  margin-top: 0.75rem;
+  font-size: 0.875rem;
+  font-weight: 650;
+}
+input,
+button {
+  border: 1px solid #9aa0a4;
+  border-radius: 0;
+  font: inherit;
+  min-height: 2.75rem;
+  padding: 0.55rem 0.7rem;
+}
+input:focus-visible,
+button:focus-visible {
+  outline: 2px solid #233e59;
+  outline-offset: 3px;
+}
+button {
+  margin-top: 1.25rem;
+  border-color: #233e59;
+  background: #233e59;
+  color: #fff;
+  cursor: pointer;
+  font-weight: 700;
+}
+button:disabled,
+input:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.form-error {
+  margin: 1rem 0 0;
+  color: #972f2f;
 }
 footer {
   border-top: 1px solid #d4d0c5;

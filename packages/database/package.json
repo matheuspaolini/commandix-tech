@@ -1,11 +1,13 @@
 {
   "name": "@commandix/database",
   "private": true,
+  "exports": "./src/index.ts",
   "dependencies": {
     "@prisma/client": "^6.19.0",
     "pg": "catalog:"
   },
   "scripts": {
+    "generate": "bun --bun prisma generate --schema prisma/schema.prisma",
     "typecheck": "bun --bun tsc -p tsconfig.json",
     "migrate": "bun --bun prisma migrate deploy --schema prisma/schema.prisma",
     "seed": "bun seed.ts"

@@ -1,74 +1,46 @@
-import { Controller, Get, Injectable, Res } from "@nestjs/common";
-import { connect } from "amqplib";
-import { Client } from "pg";
+import {
+  Controller,
+  Get,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Res,
+} from "@nestjs/common";
 import type { Response } from "express";
 
-const DEADLINE_MS = 2000;
+import {
+  type DependencyStatus,
+  type DependencyHealthProbe,
+  BROKER_HEALTH_PROBE,
+  DATABASE_HEALTH_PROBE,
+  HealthProbeRunner,
+} from "./health-probes";
 
-async function bounded(
-  check: (signal: AbortSignal) => Promise<void>,
-): Promise<"up" | "down"> {
-  const controller = new AbortController();
-  let timer: NodeJS.Timeout;
-  const timeout = new Promise<"down">((resolve) => {
-    timer = setTimeout(() => {
-      controller.abort();
-      resolve("down");
-    }, DEADLINE_MS);
-  });
-  try {
-    return await Promise.race([
-      check(controller.signal).then(
-        () => "up" as const,
-        () => "down" as const,
-      ),
-      timeout,
-    ]);
-  } finally {
-    clearTimeout(timer!);
-    controller.abort();
-  }
-}
+export type HealthReport = {
+  status: "ok" | "unavailable";
+  dependencies: {
+    database: DependencyStatus;
+    broker: DependencyStatus;
+  };
+};
 
 @Injectable()
 export class HealthService {
-  async check() {
+  constructor(
+    private readonly runner: HealthProbeRunner,
+    @Inject(DATABASE_HEALTH_PROBE)
+    private readonly database: DependencyHealthProbe,
+    @Inject(BROKER_HEALTH_PROBE)
+    private readonly broker: DependencyHealthProbe,
+  ) {}
+
+  async check(): Promise<HealthReport> {
     const [database, broker] = await Promise.all([
-      bounded(async (signal) => {
-        const client = new Client({
-          connectionString: process.env.DATABASE_URL,
-          connectionTimeoutMillis: 1000,
-          query_timeout: 1000,
-        });
-        client.on("error", () => {});
-        const close = () => {
-          void client.end().catch(() => {});
-        };
-        signal.addEventListener("abort", close, { once: true });
-        try {
-          await client.connect();
-          await client.query("SELECT 1");
-        } finally {
-          close();
-          signal.removeEventListener("abort", close);
-        }
-      }),
-      bounded(async (signal) => {
-        if (!process.env.RABBITMQ_URL)
-          throw new Error("Missing broker configuration");
-        // amqplib forwards these options to net.connect; abort also bounds handshake/close.
-        const connection = await connect(process.env.RABBITMQ_URL, {
-          timeout: 1000,
-          signal,
-        });
-        connection.on("error", () => {});
-        await connection.close();
-      }),
+      this.runner.run(this.database),
+      this.runner.run(this.broker),
     ]);
-    return {
-      status: database === "up" && broker === "up" ? "ok" : "unavailable",
-      dependencies: { database, broker },
-    };
+
+    return createHealthReport(database, broker);
   }
 }
 
@@ -77,9 +49,30 @@ export class HealthController {
   constructor(private readonly health: HealthService) {}
 
   @Get("health")
-  async get(@Res({ passthrough: true }) response: Response) {
-    const health = await this.health.check();
-    response.status(health.status === "ok" ? 200 : 503);
-    return health;
+  async get(
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<HealthReport> {
+    const report = await this.health.check();
+
+    response.status(statusFor(report));
+    return report;
   }
+}
+
+function createHealthReport(
+  database: DependencyStatus,
+  broker: DependencyStatus,
+): HealthReport {
+  const allDependenciesAreUp = database === "up" && broker === "up";
+
+  return {
+    status: allDependenciesAreUp ? "ok" : "unavailable",
+    dependencies: { database, broker },
+  };
+}
+
+function statusFor(report: HealthReport): HttpStatus {
+  return report.status === "ok"
+    ? HttpStatus.OK
+    : HttpStatus.SERVICE_UNAVAILABLE;
 }

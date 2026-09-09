@@ -2,6 +2,7 @@
   "name": "@commandix/api",
   "private": true,
   "dependencies": {
+    "@commandix/database": "workspace:*",
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",
     "@nestjs/platform-express": "^11.1.0",
