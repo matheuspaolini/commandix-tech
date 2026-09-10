@@ -59,7 +59,7 @@ JS
 # Also cover immediate connection failures and recovery in the same API process.
 "${compose[@]}" stop postgres rabbitmq
 "${compose[@]}" exec -T api bun scripts/assert-health.mjs unavailable down down
-"${compose[@]}" start --wait postgres rabbitmq
+"${compose[@]}" up -d --wait --wait-timeout 180 --no-recreate postgres rabbitmq
 "${compose[@]}" exec -T api bun scripts/assert-health.mjs ok up up
 "${compose[@]}" exec -T postgres psql -U postgres -d commandix -v ON_ERROR_STOP=1 <<'SQL'
 DO $$ BEGIN
@@ -87,7 +87,7 @@ let logs = "";
 for await (const chunk of process.stdin) logs += chunk;
 assert.doesNotMatch(logs, /proxy-secret-sentinel/);
 '
-"${compose[@]}" start --wait api
+"${compose[@]}" up -d --wait --wait-timeout 180 --no-recreate api
 "${compose[@]}" logs --no-log-prefix api worker
 "${compose[@]}" stop -t 10 api worker
 for service in api worker; do
