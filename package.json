@@ -26,7 +26,7 @@
     "build": "bun run generate && bun run typecheck && bun run --filter @commandix/web build",
     "test": "bun run --filter @commandix/api test && bun run --filter @commandix/web test",
     "db:migrate": "bun run --filter @commandix/database migrate",
-    "db:seed": "bun run --filter @commandix/database seed",
+    "db:seed": "bun run --filter @commandix/api seed",
     "check": "bun run format:check && bun run typecheck && bun run build && bun run test",
     "test:stack": "bash scripts/test-stack.sh"
   },

@@ -32,12 +32,19 @@ docker compose logs -f api worker
 Compose creates the database roles on empty volumes, waits for PostgreSQL and
 RabbitMQ health, applies versioned migrations, and runs the seed before starting
 the API and idle worker. The frontend waits for API readiness. Migration and seed
-containers exiting with code 0 is expected. The seed currently verifies a database
-connection without adding domain data; rerunning it is safe:
+containers exiting with code 0 is expected. The seed creates two development
+Tenant workspaces and is safe to rerun without overwriting existing records:
 
 ```sh
 docker compose run --rm seed
 ```
+
+Development-only credentials use the shared password `Commandix-demo-2026!`:
+
+| Tenant   | Admin               | Member               |
+| -------- | ------------------- | -------------------- |
+| `acme`   | `admin@acme.test`   | `member@acme.test`   |
+| `globex` | `admin@globex.test` | `member@globex.test` |
 
 `docker compose down` preserves data. To deliberately reset this project's local
 data, use `docker compose down --volumes`. Initial role passwords and broker
@@ -154,6 +161,19 @@ retained in this slice; bounded cleanup is future work. Never record live access
 tokens, Refresh credentials, cookies, hashes, or cookie-jar files in logs or Git.
 `JWT_SECRET` must contain at least 32 characters.
 
+Both Admins and Members can read their Tenant's active immutable Template version.
+A Tenant without an active Template receives `404`; tenant scope always comes from
+the verified access token:
+
+```sh
+token=$(curl -s -c cookies.txt http://localhost:8080/api/auth/sign-in \
+  -H 'content-type: application/json' \
+  --data '{"slug":"acme","email":"admin@acme.test","password":"Commandix-demo-2026!"}' \
+  | bun -e 'console.log((await Bun.stdin.json()).accessToken)')
+curl -i http://localhost:8080/api/templates/active \
+  -H "authorization: Bearer $token"
+```
+
 ## Develop and verify
 
 Install Bun 1.4.0 for host commands (Docker Compose and Bash are also needed for
@@ -225,11 +245,12 @@ routes. Compose smoke tests cover actual dependency failures and restoration.
 
 ## Architecture and limits
 
-The API owns Auth and Tenant modules with framework-independent normalization,
-password, token, onboarding, and persistence seams. The worker remains idle; no
-queues, consumers, contract endpoints, or seed users are installed yet. Future
+The API owns Auth, Tenant, and Contract modules with framework-independent
+normalization, password, token, onboarding, Template validation, and persistence
+seams. The worker remains idle; no queues, consumers, or Contract mutation
+endpoints are installed yet. Future
 activation delivery uses a transactional outbox, one publisher, and idempotent
-notification persistence. Contract screens, refresh sessions, tenant enforcement
-for later domain resources, and immutable history arrive in their introducing
-slices. OpenTelemetry is deferred. The Compose setup is intended for local
+notification persistence. Contract screens, immutable history, and tenant
+enforcement for later domain resources arrive in their introducing slices.
+OpenTelemetry is deferred. The Compose setup is intended for local
 development, not deployment with public credentials or exposed production services.

@@ -13,12 +13,44 @@ enum UserRole {
 }
 
 model Tenant {
-  id        String   @id @default(uuid()) @db.Uuid
-  slug      String   @unique
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  users     User[]
+  id               String            @id @default(uuid()) @db.Uuid
+  slug             String            @unique
+  createdAt        DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  users            User[]
+  logicalTemplate  LogicalTemplate?
+  templateVersions TemplateVersion[]
 
   @@map("tenants")
+}
+
+model LogicalTemplate {
+  id              String            @id @default(uuid()) @db.Uuid
+  tenantId        String            @unique @map("tenant_id") @db.Uuid
+  revision        Int               @default(1)
+  activeVersionId String?           @unique @map("active_version_id") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant          Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  versions        TemplateVersion[] @relation("TemplateVersions")
+  activeVersion   TemplateVersion?  @relation("ActiveTemplateVersion", fields: [activeVersionId, id, tenantId], references: [id, logicalTemplateId, tenantId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([id, tenantId])
+  @@unique([activeVersionId, id, tenantId])
+  @@map("logical_templates")
+}
+
+model TemplateVersion {
+  id                String           @id @default(uuid()) @db.Uuid
+  logicalTemplateId String           @map("logical_template_id") @db.Uuid
+  tenantId          String           @map("tenant_id") @db.Uuid
+  definition        Json
+  createdAt         DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant            Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  logicalTemplate   LogicalTemplate  @relation("TemplateVersions", fields: [logicalTemplateId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
+  activeFor         LogicalTemplate? @relation("ActiveTemplateVersion")
+
+  @@unique([id, logicalTemplateId, tenantId])
+  @@index([logicalTemplateId, tenantId])
+  @@map("template_versions")
 }
 
 model User {

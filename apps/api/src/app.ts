@@ -11,6 +11,7 @@ import {
 import { NestFactory } from "@nestjs/core";
 
 import { AuthModule } from "./auth/auth.module";
+import { ContractModule } from "./contract/contract.module";
 import { DatabaseModule } from "./database";
 import { SanitizedErrors } from "./errors";
 import { HealthController, HealthService } from "./health";
@@ -26,7 +27,13 @@ import { RuntimeConfigModule } from "./runtime-config";
 import { TenantModule } from "./tenant/tenant.module";
 
 @Module({
-  imports: [RuntimeConfigModule, DatabaseModule, AuthModule, TenantModule],
+  imports: [
+    RuntimeConfigModule,
+    DatabaseModule,
+    AuthModule,
+    TenantModule,
+    ContractModule,
+  ],
   controllers: [HealthController],
   providers: [
     HealthService,

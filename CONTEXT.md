@@ -21,6 +21,13 @@ _Avoid_: Template version when referring to that continuing identity.
 **Template version**:
 An immutable definition of the template's fields, including their stable keys, labels, types, required flags, and optional defaults. A contract retains the version that gives its values meaning until an explicit Draft migration.
 
+**Template field**:
+One named, typed value in a template version, with validation and optional default behavior defined by that version.
+
+**Stable field key**:
+The identity of a Template field across versions, independent of its editable label.
+_Avoid_: Label when referring to field identity.
+
 **Contract**:
 A tenant-owned document whose field values are interpreted by one template version and whose lifecycle is Draft → Active → Closed.
 

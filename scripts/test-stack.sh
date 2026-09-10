@@ -14,7 +14,27 @@ trap 'exit 143' TERM
 "${compose[@]}" up -d --build --wait --wait-timeout 180
 "${compose[@]}" exec -T api bun -e 'import assert from "node:assert/strict"; import { realpathSync } from "node:fs"; assert.equal(Bun.version, "1.4.0"); const node = Bun.which("node"); if (node) assert.equal(realpathSync(node), realpathSync(process.execPath), "node must only be a Bun shim"); assert.notEqual(process.getuid(), 0); console.log("Bun 1.4.0, no Node installation, non-root runtime verified");'
 "${compose[@]}" exec -T api bun run check
+"${compose[@]}" exec -T api bun scripts/assert-seeded-workspaces.mjs
+"${compose[@]}" exec -T postgres psql -U postgres -d commandix -v ON_ERROR_STOP=1 <<'SQL'
+UPDATE users
+SET password_hash = 'preserved-seed-edit'
+WHERE email = 'member@globex.test'
+  AND tenant_id = (SELECT id FROM tenants WHERE slug = 'globex');
+INSERT INTO tenants (slug) VALUES ('unrelated-seed-data');
+SQL
 "${compose[@]}" run --rm --no-deps seed
+"${compose[@]}" exec -T postgres psql -U postgres -d commandix -v ON_ERROR_STOP=1 <<'SQL'
+DO $$ BEGIN
+  IF (SELECT count(*) FROM tenants) <> 3
+    OR (SELECT count(*) FROM users) <> 4
+    OR (SELECT count(*) FROM logical_templates) <> 2
+    OR (SELECT count(*) FROM template_versions) <> 2
+    OR (SELECT password_hash FROM users WHERE email = 'member@globex.test') <> 'preserved-seed-edit' THEN
+    RAISE EXCEPTION 'Repeat seed changed existing data or duplicated records';
+  END IF;
+END $$;
+DELETE FROM tenants WHERE slug = 'unrelated-seed-data';
+SQL
 "${compose[@]}" exec -T api bun scripts/assert-health.mjs ok up up
 web_address=$("${compose[@]}" port web 80)
 bun scripts/assert-health.mjs ok up up "http://$web_address/api/health"

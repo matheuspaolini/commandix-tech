@@ -51,6 +51,6 @@ import { RuntimeConfig } from "../runtime-config";
       inject: [IDENTITY_REPOSITORY, PASSWORD_HASHER, RefreshSessionService],
     },
   ],
-  exports: [PASSWORD_HASHER],
+  exports: [AccessTokenGuard, AccessTokenService, PASSWORD_HASHER],
 })
 export class AuthModule {}
