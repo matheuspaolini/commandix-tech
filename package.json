@@ -21,9 +21,9 @@
   "scripts": {
     "format": "bun --bun prettier --write .",
     "format:check": "bun --bun prettier --check .",
-    "typecheck": "bun run --filter '*' typecheck",
+    "typecheck": "bun run generate && bun run --filter '*' typecheck",
     "generate": "bun run --filter @commandix/database generate",
-    "build": "bun run generate && bun run typecheck && bun run --filter @commandix/web build",
+    "build": "bun run typecheck && bun run --filter @commandix/web build",
     "test": "bun run --filter @commandix/api test && bun run --filter @commandix/web test",
     "db:migrate": "bun run --filter @commandix/database migrate",
     "db:seed": "bun run --filter @commandix/api seed",
