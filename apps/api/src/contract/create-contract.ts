@@ -1,12 +1,7 @@
 import type { TemplateDefinition } from "./template-definition";
 import { resolveContractValues, type ContractValues } from "./contract-values";
+import type { ContractSnapshot } from "./contract-snapshot";
 
-export type ContractSnapshot = {
-  status: "DRAFT" | "ACTIVE" | "CLOSED";
-  revision: number;
-  values: ContractValues;
-  templateVersionId: string;
-};
 export type NewContract = ContractSnapshot & {
   id: string;
   tenantId: string;

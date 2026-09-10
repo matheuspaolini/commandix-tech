@@ -98,6 +98,7 @@ export function Workspace() {
             element={
               <ContractDetailPage
                 session={browserSession}
+                role={state.identity.role}
                 onAuthenticationLost={authenticationLost}
               />
             }

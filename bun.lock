@@ -13,6 +13,7 @@
     "apps/api": {
       "name": "@commandix/api",
       "dependencies": {
+        "@commandix/contract-events": "workspace:*",
         "@commandix/database": "workspace:*",
         "@nestjs/common": "catalog:",
         "@nestjs/core": "catalog:",
@@ -54,6 +55,7 @@
     "apps/worker": {
       "name": "@commandix/worker",
       "dependencies": {
+        "@commandix/contract-events": "workspace:*",
         "@commandix/database": "workspace:*",
         "@nestjs/common": "catalog:",
         "@nestjs/core": "catalog:",
@@ -65,6 +67,13 @@
       },
       "devDependencies": {
         "@types/amqplib": "^0.10.7",
+        "@types/bun": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/contract-events": {
+      "name": "@commandix/contract-events",
+      "devDependencies": {
         "@types/bun": "catalog:",
         "typescript": "catalog:",
       },
@@ -97,6 +106,8 @@
     "@borewit/text-codec": ["@borewit/text-codec@0.2.2", "", {}, "sha512-DDaRehssg1aNrH4+2hnj1B7vnUGEjU6OIlyRdkMd0aUdIUvKXrJfXsy8LVtXAy7DRvYVluWbMspsRhz2lcW0mQ=="],
 
     "@commandix/api": ["@commandix/api@workspace:apps/api"],
+
+    "@commandix/contract-events": ["@commandix/contract-events@workspace:packages/contract-events"],
 
     "@commandix/database": ["@commandix/database@workspace:packages/database"],
 

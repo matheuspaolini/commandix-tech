@@ -18,6 +18,12 @@ import {
   CONTRACT_DETAIL_REPOSITORY,
   ReadContractDetail,
 } from "./read-contract-detail";
+import { ContractTransitionLogger } from "./contract-transition.logger";
+import { PrismaContractTransitionTransactions } from "./prisma-contract-transition";
+import {
+  CONTRACT_TRANSITION_TRANSACTIONS,
+  TransitionStatus,
+} from "./transition-status";
 
 @Module({
   imports: [AuthModule],
@@ -25,8 +31,19 @@ import {
   providers: [
     RolesGuard,
     ContractCreationLogger,
+    ContractTransitionLogger,
+    PrismaContractTransitionTransactions,
     PrismaContractCreationTransactions,
     PrismaContractDetailRepository,
+    {
+      provide: CONTRACT_TRANSITION_TRANSACTIONS,
+      useExisting: PrismaContractTransitionTransactions,
+    },
+    {
+      provide: TransitionStatus,
+      useFactory: (transactions) => new TransitionStatus(transactions),
+      inject: [CONTRACT_TRANSITION_TRANSACTIONS],
+    },
     {
       provide: CONTRACT_CREATION_TRANSACTIONS,
       useExisting: PrismaContractCreationTransactions,

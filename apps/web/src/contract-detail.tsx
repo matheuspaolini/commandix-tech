@@ -19,6 +19,14 @@ type ContractDetailState =
   | { status: "notFound" }
   | { status: "failed" };
 
+type ActivationState =
+  | { status: "idle" }
+  | { status: "confirming" }
+  | { status: "pending" }
+  | { status: "succeeded" }
+  | { status: "failed" }
+  | { status: "conflict"; reloadFailed: boolean };
+
 const MONTHS = [
   "January",
   "February",
@@ -43,9 +51,11 @@ export interface ContractDetailSession {
 
 export function ContractDetailPage({
   session,
+  role,
   onAuthenticationLost,
 }: {
   session: ContractDetailSession;
+  role: "ADMIN" | "MEMBER";
   onAuthenticationLost: () => void;
 }) {
   const { contractId = "" } = useParams();
@@ -53,8 +63,12 @@ export function ContractDetailPage({
   const [state, setState] = useState<ContractDetailState>({
     status: "loading",
   });
+  const [activation, setActivation] = useState<ActivationState>({
+    status: "idle",
+  });
 
   useEffect(() => {
+    setActivation({ status: "idle" });
     if (!isUuidV4(contractId)) {
       setState({ status: "notFound" });
       return;
@@ -124,6 +138,54 @@ export function ContractDetailPage({
 
   const contract = state.contract;
   const status = formatContractStatus(contract.status);
+
+  async function reloadAfterConflict(): Promise<void> {
+    try {
+      const latest = await session.requestJson(
+        API_ENDPOINTS.contractDetail(contract.id),
+        { isValid: isContractDetail },
+      );
+      setState({ status: "ready", contract: latest });
+      setActivation({ status: "conflict", reloadFailed: false });
+    } catch (error) {
+      if (error instanceof ApiResponseError && error.status === 401) {
+        onAuthenticationLost();
+        return;
+      }
+      setActivation({ status: "conflict", reloadFailed: true });
+    }
+  }
+
+  async function activate(): Promise<void> {
+    setActivation({ status: "pending" });
+    try {
+      const activated = await session.requestJson(
+        API_ENDPOINTS.activateContract(contract.id),
+        {
+          init: {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ expectedRevision: contract.revision }),
+          },
+          isValid: isContractDetail,
+        },
+      );
+      setState({ status: "ready", contract: activated });
+      setActivation({ status: "succeeded" });
+    } catch (error) {
+      if (error instanceof ApiResponseError && error.status === 401) {
+        onAuthenticationLost();
+        return;
+      }
+      if (error instanceof ApiResponseError && error.status === 409) {
+        setActivation({ status: "conflict", reloadFailed: false });
+        await reloadAfterConflict();
+        return;
+      }
+      setActivation({ status: "failed" });
+    }
+  }
+
   return (
     <main className="detail-main">
       <article className="contract-sheet" aria-labelledby="contract-heading">
@@ -164,6 +226,65 @@ export function ContractDetailPage({
             ))}
           </dl>
         </section>
+        {activation.status === "succeeded" ? (
+          <p role="status" className="form-success">
+            Contract activated.
+          </p>
+        ) : null}
+        {activation.status === "failed" ? (
+          <p role="alert" className="form-error">
+            Activation could not be completed. Try again.
+          </p>
+        ) : null}
+        {activation.status === "conflict" ? (
+          <div role="alert" className="form-error">
+            <p>
+              This contract changed. Review the latest version before trying
+              again.
+            </p>
+            {activation.reloadFailed ? (
+              <button type="button" onClick={() => void reloadAfterConflict()}>
+                Reload contract
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {role === "ADMIN" &&
+        contract.status === "DRAFT" &&
+        activation.status !== "succeeded" &&
+        !(activation.status === "conflict" && activation.reloadFailed) ? (
+          <section className="contract-actions" aria-label="Contract actions">
+            {activation.status === "idle" ||
+            activation.status === "conflict" ? (
+              <button
+                type="button"
+                onClick={() => setActivation({ status: "confirming" })}
+              >
+                Activate contract
+              </button>
+            ) : (
+              <>
+                <p>Activation locks this contract's contents. Continue?</p>
+                <button
+                  type="button"
+                  disabled={activation.status === "pending"}
+                  onClick={() => void activate()}
+                >
+                  {activation.status === "pending"
+                    ? "Activating…"
+                    : "Confirm activation"}
+                </button>
+                <button
+                  type="button"
+                  disabled={activation.status === "pending"}
+                  onClick={() => setActivation({ status: "idle" })}
+                >
+                  Cancel
+                </button>
+              </>
+            )}
+          </section>
+        ) : null}
         <Link className="text-link" to="/">
           Back to home
         </Link>

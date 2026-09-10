@@ -8,7 +8,7 @@ import { WorkerModule } from "./worker.module";
 
 async function main(): Promise<void> {
   const config = workerRuntimeConfigFromEnvironment();
-  await new RabbitMqTopology(config.rabbitMqUrl).declare();
+  await declareTopology(new RabbitMqTopology(config.rabbitMqUrl));
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
     WorkerModule,
     {
@@ -27,6 +27,25 @@ async function main(): Promise<void> {
   app.enableShutdownHooks();
   await app.listen();
   console.log(JSON.stringify({ event: "worker_started", mode: "consumer" }));
+}
+
+async function declareTopology(topology: RabbitMqTopology): Promise<void> {
+  let attempt = 0;
+  for (;;) {
+    try {
+      await topology.declare();
+      return;
+    } catch {
+      const delay = [250, 500, 1_000, 2_000][attempt++] ?? 5_000;
+      console.error(
+        JSON.stringify({
+          event: "worker_broker_startup_retry",
+          delayMs: delay,
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
 }
 
 void main().catch(() => {

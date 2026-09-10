@@ -2,6 +2,7 @@
   "name": "@commandix/api",
   "private": true,
   "dependencies": {
+    "@commandix/contract-events": "workspace:*",
     "@commandix/database": "workspace:*",
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",

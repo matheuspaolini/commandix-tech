@@ -12,7 +12,9 @@ export type PublicErrorBody = {
   code:
     | "ACTIVE_TEMPLATE_REQUIRED"
     | "INVALID_CONTRACT_VALUES"
-    | "CONTRACT_NOT_FOUND";
+    | "CONTRACT_NOT_FOUND"
+    | "CONTRACT_REVISION_CONFLICT"
+    | "CONTRACT_STATUS_CONFLICT";
   issues?: { key?: string; code: string }[];
 };
 

@@ -1,0 +1,12 @@
+{
+  "name": "@commandix/contract-events",
+  "private": true,
+  "exports": "./src/index.ts",
+  "scripts": {
+    "typecheck": "bun --bun tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/bun": "catalog:",
+    "typescript": "catalog:"
+  }
+}

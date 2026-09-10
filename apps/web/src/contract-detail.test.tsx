@@ -56,6 +56,7 @@ async function settle() {
 function renderDetail(
   session: ContractDetailSession,
   contractId = CONTRACT_ID,
+  role: "ADMIN" | "MEMBER" = "MEMBER",
 ) {
   return render(
     <MemoryRouter initialEntries={[`/contracts/${contractId}`]}>
@@ -65,6 +66,7 @@ function renderDetail(
           element={
             <ContractDetailPage
               session={session}
+              role={role}
               onAuthenticationLost={() => undefined}
             />
           }
@@ -191,6 +193,7 @@ test("reports an expired authenticated session", async () => {
           element={
             <ContractDetailPage
               session={session}
+              role="ADMIN"
               onAuthenticationLost={() => {
                 authenticationLost = true;
               }}
@@ -203,4 +206,119 @@ test("reports an expired authenticated session", async () => {
   await settle();
 
   expect(authenticationLost).toBe(true);
+});
+
+test("confirms activation and renders the committed Contract", async () => {
+  const requests: Array<{ url: string; method?: string; body?: string }> = [];
+  const session = {
+    requestJson: async (url: string, options: { init?: RequestInit }) => {
+      requests.push({
+        url,
+        method: options.init?.method,
+        body: options.init?.body as string | undefined,
+      });
+      return options.init?.method === "POST"
+        ? { ...contract, status: "ACTIVE", revision: 2 }
+        : contract;
+    },
+  } as ContractDetailSession;
+  await renderDetail(session, CONTRACT_ID, "ADMIN");
+  await settle();
+  const activate = Array.from(document.querySelectorAll("button")).find(
+    (button) => button.textContent === "Activate contract",
+  )!;
+  await act(async () => activate.click());
+  const confirm = Array.from(document.querySelectorAll("button")).find(
+    (button) => button.textContent === "Confirm activation",
+  )!;
+  await act(async () => {
+    confirm.click();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect({
+    requests,
+    active: document.body.textContent?.includes("Active contract"),
+    success: document.body.textContent?.includes("Contract activated."),
+  }).toStrictEqual({
+    requests: [
+      {
+        url: `/api/contracts/${CONTRACT_ID}`,
+        method: undefined,
+        body: undefined,
+      },
+      {
+        url: `/api/contracts/${CONTRACT_ID}/activate`,
+        method: "POST",
+        body: '{"expectedRevision":1}',
+      },
+    ],
+    active: true,
+    success: true,
+  });
+});
+
+test("never offers activation to a Member", async () => {
+  await render(
+    <MemoryRouter initialEntries={[`/contracts/${CONTRACT_ID}`]}>
+      <Routes>
+        <Route
+          path="/contracts/:contractId"
+          element={
+            <ContractDetailPage
+              session={
+                { requestJson: async () => contract } as ContractDetailSession
+              }
+              role="MEMBER"
+              onAuthenticationLost={() => undefined}
+            />
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
+  );
+  await settle();
+
+  expect(document.body.textContent).not.toContain("Activate contract");
+});
+
+test("reloads a conflicting activation without resubmitting", async () => {
+  let requests = 0;
+  const session = {
+    requestJson: async (_url: string, options: { init?: RequestInit }) => {
+      requests += 1;
+      if (options.init?.method === "POST") throw new ApiResponseError(409);
+      return requests === 1
+        ? contract
+        : { ...contract, status: "ACTIVE", revision: 2 };
+    },
+  } as ContractDetailSession;
+  await renderDetail(session, CONTRACT_ID, "ADMIN");
+  await settle();
+  const activate = Array.from(document.querySelectorAll("button")).find(
+    (button) => button.textContent === "Activate contract",
+  )!;
+  await act(async () => activate.click());
+  const confirm = Array.from(document.querySelectorAll("button")).find(
+    (button) => button.textContent === "Confirm activation",
+  )!;
+  await act(async () => {
+    confirm.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect({
+    requests,
+    message: document.body.textContent,
+    canActivate: Array.from(document.querySelectorAll("button")).some(
+      (button) => button.textContent === "Activate contract",
+    ),
+  }).toStrictEqual({
+    requests: 3,
+    message: expect.stringContaining("This contract changed"),
+    canActivate: false,
+  });
 });

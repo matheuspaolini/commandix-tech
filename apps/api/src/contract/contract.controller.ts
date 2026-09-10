@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
   Param,
   ParseUUIDPipe,
   Post,
@@ -21,6 +22,14 @@ import { InvalidContractValues } from "./contract-values";
 import { ActiveTemplateRequired, CreateContract } from "./create-contract";
 import { CreateContractDto } from "./create-contract.dto";
 import { ContractNotFound, ReadContractDetail } from "./read-contract-detail";
+import { ActivateContractDto } from "./activate-contract.dto";
+import { ContractTransitionLogger } from "./contract-transition.logger";
+import { requestContext } from "../http";
+import {
+  ContractRevisionConflict,
+  ContractStatusConflict,
+  TransitionStatus,
+} from "./transition-status";
 
 @Controller("contracts")
 @UseGuards(AccessTokenGuard, RolesGuard)
@@ -29,7 +38,52 @@ export class ContractController {
     private readonly createContract: CreateContract,
     private readonly logger: ContractCreationLogger,
     private readonly readContractDetail: ReadContractDetail,
+    private readonly transitionStatus: TransitionStatus,
+    private readonly transitionLogger: ContractTransitionLogger,
   ) {}
+
+  @Post(":id/activate")
+  @HttpCode(200)
+  @Roles("ADMIN")
+  async activate(
+    @Req() request: AuthenticatedRequest,
+    @Param("id", new ParseUUIDPipe({ version: "4" })) contractId: string,
+    @Body() body: ActivateContractDto,
+  ) {
+    const identity = request.identity!;
+    try {
+      const result = await this.transitionStatus.execute({
+        tenantId: identity.tenantId,
+        actorId: identity.sub,
+        contractId,
+        expectedRevision: body.expectedRevision,
+        targetStatus: "ACTIVE",
+        correlationId: requestContext.correlationId()!,
+      });
+      const { eventId, ...detail } = result;
+      this.transitionLogger.activated({
+        tenantId: identity.tenantId,
+        actorId: identity.sub,
+        contractId,
+        revision: detail.revision,
+        eventId,
+      });
+      return detail;
+    } catch (error) {
+      const code = activationErrorCode(error);
+      if (!code) throw error;
+      this.transitionLogger.rejected({
+        tenantId: identity.tenantId,
+        actorId: identity.sub,
+        contractId,
+        expectedRevision: body.expectedRevision,
+        reason: code,
+      });
+      throw new PublicHttpException(code === "CONTRACT_NOT_FOUND" ? 404 : 409, {
+        code,
+      });
+    }
+  }
 
   @Get(":id")
   @Roles("ADMIN", "MEMBER")
@@ -92,4 +146,13 @@ export class ContractController {
       throw error;
     }
   }
+}
+
+function activationErrorCode(error: unknown) {
+  if (error instanceof ContractNotFound) return "CONTRACT_NOT_FOUND" as const;
+  if (error instanceof ContractRevisionConflict)
+    return "CONTRACT_REVISION_CONFLICT" as const;
+  if (error instanceof ContractStatusConflict)
+    return "CONTRACT_STATUS_CONFLICT" as const;
+  return undefined;
 }

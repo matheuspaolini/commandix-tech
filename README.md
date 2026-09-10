@@ -205,6 +205,26 @@ The response includes status, revision, saved values, and
 return `404 CONTRACT_NOT_FOUND`. The browser supports direct authenticated
 `/contracts/{id}` navigation and returns to that route after sign-in.
 
+An Admin activates a current Draft through an expected-revision action:
+
+```sh
+curl -i -X POST http://localhost:8080/api/contracts/CONTRACT_ID/activate \
+  -H "authorization: Bearer $token" \
+  -H 'content-type: application/json' \
+  --data '{"expectedRevision":1}'
+```
+
+The successful `200` response is the updated Contract detail. A stale revision
+returns `409 CONTRACT_REVISION_CONFLICT`; when the revision is current but the
+Contract is not Draft, the response is `409 CONTRACT_STATUS_CONFLICT`. Revision
+is checked first. Members receive `403`, and missing or foreign-Tenant Contracts
+receive the same `404 CONTRACT_NOT_FOUND` response.
+
+Activation, its `ACTIVATED` History entry, and its stable-identity Outbox event
+commit in one PostgreSQL transaction. HTTP never contacts RabbitMQ: success means
+the transaction committed, not that notification processing has finished. The
+browser reloads current Contract state after a conflict without resubmitting.
+
 ## Activation notification delivery
 
 The worker consumes the version-one activation event through this durable classic
@@ -266,6 +286,18 @@ replay the original identity through a publisher-confirmed command:
 ```sh
 bun run --filter @commandix/worker replay:contract-activated -- ./event.json
 ```
+
+The same worker process hosts the only supported Outbox publisher. Deploy exactly
+one publisher instance; multi-publisher coordination is not implemented. It
+reserves attempts before broker I/O, publishes persistent mandatory messages on
+an independent confirm connection, and retains published Outbox rows as evidence.
+Returns, nacks, confirmation timeouts, and connection loss remain pending and
+retry after 250 ms, 500 ms, 1 s, 2 s, then at a five-second cap indefinitely.
+Only positive confirmation with successful routing sets `publishedAt`. A crash
+after broker acceptance can republish the same event ID; consumer idempotency
+still produces one Notification log. Configure the confirmation deadline with
+`OUTBOX_PUBLISH_CONFIRM_TIMEOUT_MS` (100–60000, default `5000`). Outbox cleanup is
+outside the current scope.
 
 Verify `notification_processed` in worker logs (or the notification row) before
 acknowledging/removing the original DLQ entry. Worker logs include only safe event,
@@ -346,9 +378,8 @@ routes. Compose smoke tests cover actual dependency failures and restoration.
 
 The API owns Auth, Tenant, and Contract modules with framework-independent
 normalization, password, token, onboarding, Template validation, and persistence
-seams. The separate worker owns durable activation-event consumption and
-idempotent notification evidence; a later slice adds the transactional outbox and
-its single publisher. Draft creation is the only Contract mutation endpoint in
-this slice.
+seams. The separate worker owns durable activation-event publication, consumption,
+and idempotent notification evidence. Draft creation and Admin activation are the
+currently supported Contract mutation endpoints.
 OpenTelemetry is deferred. The Compose setup is intended for local
 development, not deployment with public credentials or exposed production services.

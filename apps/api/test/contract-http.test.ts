@@ -34,6 +34,16 @@ function read(token: string, contractId: string) {
     .get(`/contracts/${contractId}`)
     .set("Authorization", `Bearer ${token}`);
 }
+function activate(
+  token: string,
+  contractId: string,
+  expectedRevision: unknown,
+) {
+  return request(app.getHttpServer())
+    .post(`/contracts/${contractId}/activate`)
+    .set("Authorization", `Bearer ${token}`)
+    .send({ expectedRevision });
+}
 async function removeTemplateVersionFixture(versionId: string) {
   if (!cleanupClient) throw new Error("Missing TEST_DATABASE_URL");
   await cleanupClient.$executeRawUnsafe(
@@ -99,7 +109,7 @@ describe("POST /contracts", () => {
       })),
     }).toStrictEqual({
       responses: responses.map((response) => ({
-        status: 201,
+        status: 200,
         location: `/contracts/${response.body.id}`,
         body: {
           id: response.body.id,
@@ -358,5 +368,144 @@ describe("GET /contracts/:id", () => {
       });
       await removeTemplateVersionFixture(replacementVersionId);
     }
+  });
+});
+
+describe("POST /contracts/:id/activate", () => {
+  test("allows an Admin to atomically activate an own-Tenant Draft", async () => {
+    const created = await create(tokens.get("acme:admin")!, {
+      title: "Activation contract",
+      "effective-date": "2028-01-01",
+    });
+    const response = await activate(
+      tokens.get("acme:admin")!,
+      created.body.id,
+      1,
+    );
+    const persisted = await client.contract.findUniqueOrThrow({
+      where: { id: created.body.id },
+      include: {
+        history: { orderBy: { revision: "asc" } },
+        activationOutbox: true,
+      },
+    });
+
+    expect({
+      response: {
+        status: response.status,
+        body: response.body,
+      },
+      persisted: {
+        status: persisted.status,
+        revision: persisted.revision,
+        history: persisted.history.map((entry) => ({
+          action: entry.action,
+          revision: entry.revision,
+          before: entry.beforeSnapshot,
+          after: entry.afterSnapshot,
+        })),
+        outbox: persisted.activationOutbox.map((event) => ({
+          type: event.eventType,
+          version: event.schemaVersion,
+          revision: event.activationRevision,
+          correlationId: event.correlationId,
+          attempts: event.attemptCount,
+          publishedAt: event.publishedAt,
+        })),
+      },
+    }).toStrictEqual({
+      response: {
+        status: 201,
+        body: {
+          id: created.body.id,
+          status: "ACTIVE",
+          revision: 2,
+          values: expect.any(Object),
+          templateVersion: {
+            id: created.body.templateVersionId,
+            fields: expect.any(Array),
+          },
+        },
+      },
+      persisted: {
+        status: "ACTIVE",
+        revision: 2,
+        history: [
+          {
+            action: "CREATED",
+            revision: 1,
+            before: null,
+            after: expect.any(Object),
+          },
+          {
+            action: "ACTIVATED",
+            revision: 2,
+            before: expect.objectContaining({ status: "DRAFT", revision: 1 }),
+            after: expect.objectContaining({ status: "ACTIVE", revision: 2 }),
+          },
+        ],
+        outbox: [
+          {
+            type: "contract.activated",
+            version: 1,
+            revision: 2,
+            correlationId: expect.any(String),
+            attempts: 0,
+            publishedAt: null,
+          },
+        ],
+      },
+    });
+  });
+
+  test("rejects Member, stale, and repeated activation without extra writes", async () => {
+    const created = await create(tokens.get("acme:admin")!, {
+      title: "Conflict contract",
+      "effective-date": "2028-01-01",
+    });
+    const member = await activate(
+      tokens.get("acme:member")!,
+      created.body.id,
+      1,
+    );
+    const accepted = await activate(
+      tokens.get("acme:admin")!,
+      created.body.id,
+      1,
+    );
+    const repeatedStale = await activate(
+      tokens.get("acme:admin")!,
+      created.body.id,
+      1,
+    );
+    const repeatedCurrent = await activate(
+      tokens.get("acme:admin")!,
+      created.body.id,
+      2,
+    );
+    const persisted = await client.contract.findUniqueOrThrow({
+      where: { id: created.body.id },
+      include: { history: true, activationOutbox: true },
+    });
+
+    expect({
+      responses: [member, accepted, repeatedStale, repeatedCurrent].map(
+        (response) => ({ status: response.status, code: response.body.code }),
+      ),
+      persisted: {
+        status: persisted.status,
+        revision: persisted.revision,
+        history: persisted.history.length,
+        outbox: persisted.activationOutbox.length,
+      },
+    }).toStrictEqual({
+      responses: [
+        { status: 403, code: undefined },
+        { status: 200, code: undefined },
+        { status: 409, code: "CONTRACT_REVISION_CONFLICT" },
+        { status: 409, code: "CONTRACT_STATUS_CONFLICT" },
+      ],
+      persisted: { status: "ACTIVE", revision: 2, history: 2, outbox: 1 },
+    });
   });
 });

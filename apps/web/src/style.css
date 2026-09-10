@@ -244,6 +244,18 @@ select:disabled {
   margin: 0.35rem 0 0;
   overflow-wrap: anywhere;
 }
+.contract-actions {
+  margin-top: 2rem;
+  padding: 1.25rem;
+  border: 1px solid #d4d0c5;
+  background: #f5f1e8;
+}
+.contract-actions p {
+  margin-top: 0;
+}
+.contract-actions button + button {
+  margin-left: 0.75rem;
+}
 .contract-metadata dd {
   font-size: 0.9375rem;
 }

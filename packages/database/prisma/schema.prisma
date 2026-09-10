@@ -20,6 +20,14 @@ enum ContractStatus {
 
 enum ContractHistoryAction {
   CREATED
+  ACTIVATED
+}
+
+enum OutboxFailureReason {
+  RETURNED
+  NACKED
+  CONFIRM_TIMEOUT
+  CONNECTION_LOST
 }
 
 model Tenant {
@@ -32,6 +40,7 @@ model Tenant {
   contracts        Contract[]
   contractHistory  ContractHistory[]
   notificationLogs NotificationLog[]
+  activationOutbox ContractActivationOutbox[]
 
   @@map("tenants")
 }
@@ -96,10 +105,32 @@ model Contract {
   templateVersion   TemplateVersion   @relation(fields: [templateVersionId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
   history           ContractHistory[]
   notificationLogs NotificationLog[]
+  activationOutbox ContractActivationOutbox[]
 
   @@unique([id, tenantId])
   @@index([tenantId, createdAt])
   @@map("contracts")
+}
+
+model ContractActivationOutbox {
+  eventId            String               @id @map("event_id") @db.Uuid
+  eventType          String               @map("event_type")
+  schemaVersion      Int                  @map("schema_version")
+  tenantId           String               @map("tenant_id") @db.Uuid
+  contractId         String               @map("contract_id") @db.Uuid
+  activationRevision Int                  @map("activation_revision")
+  occurredAt         DateTime             @map("occurred_at") @db.Timestamptz(3)
+  correlationId      String               @map("correlation_id") @db.Uuid
+  attemptCount       Int                  @default(0) @map("attempt_count")
+  lastAttemptAt      DateTime?            @map("last_attempt_at") @db.Timestamptz(6)
+  nextAttemptAt      DateTime             @map("next_attempt_at") @db.Timestamptz(6)
+  publishedAt        DateTime?            @map("published_at") @db.Timestamptz(6)
+  failureReason      OutboxFailureReason? @map("failure_reason")
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  contract            Contract             @relation(fields: [contractId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([tenantId, contractId, activationRevision])
+  @@map("contract_activation_outbox")
 }
 
 model NotificationLog {

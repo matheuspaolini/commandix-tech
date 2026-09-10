@@ -1,5 +1,8 @@
 import type { ContractValues } from "./contract-values";
 import type { TemplateDefinition } from "./template-definition";
+import { ContractNotFound } from "./contract-errors";
+
+export { ContractNotFound } from "./contract-errors";
 
 export type ContractStatus = "DRAFT" | "ACTIVE" | "CLOSED";
 
@@ -31,8 +34,6 @@ export interface ContractDetailRepository {
     contractId: string;
   }): Promise<ContractDetailRecord | null>;
 }
-
-export class ContractNotFound extends Error {}
 
 export class ReadContractDetail {
   constructor(private readonly contracts: ContractDetailRepository) {}
