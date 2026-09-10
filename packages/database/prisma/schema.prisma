@@ -21,6 +21,7 @@ enum ContractStatus {
 enum ContractHistoryAction {
   CREATED
   ACTIVATED
+  CLOSED
 }
 
 enum OutboxFailureReason {

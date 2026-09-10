@@ -24,6 +24,7 @@ import { ActiveTemplateRequired, CreateContract } from "./create-contract";
 import { CreateContractDto } from "./create-contract.dto";
 import { ContractNotFound, ReadContractDetail } from "./read-contract-detail";
 import { ActivateContractDto } from "./activate-contract.dto";
+import { CloseContractDto } from "./close-contract.dto";
 import { ContractTransitionLogger } from "./contract-transition.logger";
 import { requestContext } from "../http";
 import {
@@ -103,19 +104,63 @@ export class ContractController {
         targetStatus: "ACTIVE",
         correlationId: requestContext.correlationId()!,
       });
-      const { eventId, ...detail } = result;
+      if (result.targetStatus !== "ACTIVE")
+        throw new Error("Unexpected transition result");
       this.transitionLogger.activated({
         tenantId: identity.tenantId,
         actorId: identity.sub,
         contractId,
-        revision: detail.revision,
-        eventId,
+        revision: result.contract.revision,
+        eventId: result.eventId,
       });
-      return detail;
+      return result.contract;
     } catch (error) {
-      const code = activationErrorCode(error);
+      const code = transitionErrorCode(error);
       if (!code) throw error;
       this.transitionLogger.rejected({
+        tenantId: identity.tenantId,
+        actorId: identity.sub,
+        contractId,
+        expectedRevision: body.expectedRevision,
+        reason: code,
+      });
+      throw new PublicHttpException(code === "CONTRACT_NOT_FOUND" ? 404 : 409, {
+        code,
+      });
+    }
+  }
+
+  @Post(":id/close")
+  @HttpCode(200)
+  @Roles("ADMIN")
+  async close(
+    @Req() request: AuthenticatedRequest,
+    @Param("id", new ParseUUIDPipe({ version: "4" })) contractId: string,
+    @Body() body: CloseContractDto,
+  ) {
+    const identity = request.identity!;
+    try {
+      const result = await this.transitionStatus.execute({
+        tenantId: identity.tenantId,
+        actorId: identity.sub,
+        contractId,
+        expectedRevision: body.expectedRevision,
+        targetStatus: "CLOSED",
+        correlationId: requestContext.correlationId()!,
+      });
+      if (result.targetStatus !== "CLOSED")
+        throw new Error("Unexpected transition result");
+      this.transitionLogger.closed({
+        tenantId: identity.tenantId,
+        actorId: identity.sub,
+        contractId,
+        revision: result.contract.revision,
+      });
+      return result.contract;
+    } catch (error) {
+      const code = transitionErrorCode(error);
+      if (!code) throw error;
+      this.transitionLogger.closureRejected({
         tenantId: identity.tenantId,
         actorId: identity.sub,
         contractId,
@@ -191,7 +236,7 @@ export class ContractController {
   }
 }
 
-function activationErrorCode(error: unknown) {
+function transitionErrorCode(error: unknown) {
   if (error instanceof ContractNotFound) return "CONTRACT_NOT_FOUND" as const;
   if (error instanceof ContractRevisionConflict)
     return "CONTRACT_REVISION_CONFLICT" as const;

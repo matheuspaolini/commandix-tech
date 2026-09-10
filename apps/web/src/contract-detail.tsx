@@ -6,6 +6,7 @@ import {
   ApiResponseError,
   type AuthenticatedJsonOptions,
   type ContractDetail,
+  type ContractStatus,
   isContractDetail,
   isUuidV4,
 } from "@/shared/api";
@@ -14,6 +15,10 @@ import {
   formatContractStatus,
   formatContractValue,
 } from "./contract-presentation";
+import {
+  ContractHistoryTimeline,
+  useContractHistory,
+} from "./contract-history-view";
 
 export {
   formatCalendarDate,
@@ -27,13 +32,33 @@ type ContractDetailState =
   | { status: "notFound" }
   | { status: "failed" };
 
-type ActivationState =
+type TransitionTarget = "ACTIVE" | "CLOSED";
+type TransitionState =
   | { status: "idle" }
-  | { status: "confirming" }
-  | { status: "pending" }
-  | { status: "succeeded" }
-  | { status: "failed" }
-  | { status: "conflict"; reloadFailed: boolean };
+  | { status: "confirming"; target: TransitionTarget }
+  | { status: "pending"; target: TransitionTarget }
+  | { status: "succeeded"; target: TransitionTarget }
+  | { status: "failed"; target: TransitionTarget }
+  | { status: "conflict"; target: TransitionTarget; reloadFailed: boolean };
+
+const TRANSITION_PRESENTATION = {
+  ACTIVE: {
+    action: "Activate contract",
+    confirm: "Confirm activation",
+    pending: "Activating…",
+    success: "Contract activated.",
+    failure: "Activation could not be completed. Try again.",
+    warning: "Activation locks this contract's contents. Continue?",
+  },
+  CLOSED: {
+    action: "Close contract",
+    confirm: "Confirm closure",
+    pending: "Closing…",
+    success: "Contract closed.",
+    failure: "Closure could not be completed. Try again.",
+    warning: "Closure is terminal and cannot be reversed. Continue?",
+  },
+} as const;
 
 export interface ContractDetailSession {
   requestJson<Value>(
@@ -56,12 +81,17 @@ export function ContractDetailPage({
   const [state, setState] = useState<ContractDetailState>({
     status: "loading",
   });
-  const [activation, setActivation] = useState<ActivationState>({
+  const [transitionState, setTransitionState] = useState<TransitionState>({
     status: "idle",
+  });
+  const history = useContractHistory({
+    contractId,
+    session,
+    onAuthenticationLost,
   });
 
   useEffect(() => {
-    setActivation({ status: "idle" });
+    setTransitionState({ status: "idle" });
     if (!isUuidV4(contractId)) {
       setState({ status: "notFound" });
       return;
@@ -132,50 +162,57 @@ export function ContractDetailPage({
   const contract = state.contract;
   const status = formatContractStatus(contract.status);
 
-  async function reloadAfterConflict(): Promise<void> {
+  async function reloadAfterConflict(target: TransitionTarget): Promise<void> {
     try {
       const latest = await session.requestJson(
         API_ENDPOINTS.contractDetail(contract.id),
         { isValid: isContractDetail },
       );
       setState({ status: "ready", contract: latest });
-      setActivation({ status: "conflict", reloadFailed: false });
+      const historyReloaded = await history.reload();
+      setTransitionState({
+        status: "conflict",
+        target,
+        reloadFailed: !historyReloaded,
+      });
     } catch (error) {
       if (error instanceof ApiResponseError && error.status === 401) {
         onAuthenticationLost();
         return;
       }
-      setActivation({ status: "conflict", reloadFailed: true });
+      setTransitionState({ status: "conflict", target, reloadFailed: true });
     }
   }
 
-  async function activate(): Promise<void> {
-    setActivation({ status: "pending" });
+  async function transition(target: TransitionTarget): Promise<void> {
+    setTransitionState({ status: "pending", target });
     try {
-      const activated = await session.requestJson(
-        API_ENDPOINTS.activateContract(contract.id),
-        {
-          init: {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ expectedRevision: contract.revision }),
-          },
-          isValid: isContractDetail,
+      const endpoint =
+        target === "ACTIVE"
+          ? API_ENDPOINTS.activateContract(contract.id)
+          : API_ENDPOINTS.closeContract(contract.id);
+      const transitioned = await session.requestJson(endpoint, {
+        init: {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ expectedRevision: contract.revision }),
         },
-      );
-      setState({ status: "ready", contract: activated });
-      setActivation({ status: "succeeded" });
+        isValid: isContractDetail,
+      });
+      setState({ status: "ready", contract: transitioned });
+      setTransitionState({ status: "succeeded", target });
+      await history.reload();
     } catch (error) {
       if (error instanceof ApiResponseError && error.status === 401) {
         onAuthenticationLost();
         return;
       }
       if (error instanceof ApiResponseError && error.status === 409) {
-        setActivation({ status: "conflict", reloadFailed: false });
-        await reloadAfterConflict();
+        setTransitionState({ status: "conflict", target, reloadFailed: false });
+        await reloadAfterConflict(target);
         return;
       }
-      setActivation({ status: "failed" });
+      setTransitionState({ status: "failed", target });
     }
   }
 
@@ -219,64 +256,93 @@ export function ContractDetailPage({
             ))}
           </dl>
         </section>
-        {activation.status === "succeeded" ? (
+        {transitionState.status === "succeeded" ? (
           <p role="status" className="form-success">
-            Contract activated.
+            {TRANSITION_PRESENTATION[transitionState.target].success}
           </p>
         ) : null}
-        {activation.status === "failed" ? (
+        {transitionState.status === "failed" ? (
           <p role="alert" className="form-error">
-            Activation could not be completed. Try again.
+            {TRANSITION_PRESENTATION[transitionState.target].failure}
           </p>
         ) : null}
-        {activation.status === "conflict" ? (
+        {transitionState.status === "conflict" ? (
           <div role="alert" className="form-error">
             <p>
               This contract changed. Review the latest version before trying
               again.
             </p>
-            {activation.reloadFailed ? (
-              <button type="button" onClick={() => void reloadAfterConflict()}>
+            {transitionState.reloadFailed ? (
+              <button
+                type="button"
+                onClick={() => void reloadAfterConflict(transitionState.target)}
+              >
                 Reload contract
               </button>
             ) : null}
           </div>
         ) : null}
-        {role === "ADMIN" &&
-        contract.status === "DRAFT" &&
-        activation.status !== "succeeded" &&
-        !(activation.status === "conflict" && activation.reloadFailed) ? (
+        {eligibleTransition(role, contract.status) &&
+        transitionState.status !== "succeeded" &&
+        !(
+          transitionState.status === "conflict" && transitionState.reloadFailed
+        ) ? (
           <section className="contract-actions" aria-label="Contract actions">
-            {activation.status === "idle" ||
-            activation.status === "conflict" ? (
+            {transitionState.status === "idle" ||
+            transitionState.status === "conflict" ||
+            transitionState.status === "failed" ? (
               <button
                 type="button"
-                onClick={() => setActivation({ status: "confirming" })}
+                onClick={() =>
+                  setTransitionState({
+                    status: "confirming",
+                    target: eligibleTransition(role, contract.status)!,
+                  })
+                }
               >
-                Activate contract
+                {
+                  TRANSITION_PRESENTATION[
+                    eligibleTransition(role, contract.status)!
+                  ].action
+                }
               </button>
             ) : (
               <>
-                <p>Activation locks this contract's contents. Continue?</p>
+                <p>{TRANSITION_PRESENTATION[transitionState.target].warning}</p>
                 <button
                   type="button"
-                  disabled={activation.status === "pending"}
-                  onClick={() => void activate()}
+                  disabled={transitionState.status === "pending"}
+                  onClick={() => void transition(transitionState.target)}
                 >
-                  {activation.status === "pending"
-                    ? "Activating…"
-                    : "Confirm activation"}
+                  {transitionState.status === "pending"
+                    ? TRANSITION_PRESENTATION[transitionState.target].pending
+                    : TRANSITION_PRESENTATION[transitionState.target].confirm}
                 </button>
                 <button
                   type="button"
-                  disabled={activation.status === "pending"}
-                  onClick={() => setActivation({ status: "idle" })}
+                  disabled={transitionState.status === "pending"}
+                  onClick={() => setTransitionState({ status: "idle" })}
                 >
                   Cancel
                 </button>
               </>
             )}
           </section>
+        ) : null}
+        {history.state.status === "ready" ? (
+          <ContractHistoryTimeline
+            history={history.state.history}
+            mode="preview"
+          />
+        ) : history.state.status === "failed" ? (
+          <div className="form-error">
+            <p>History could not be refreshed.</p>
+            <button type="button" onClick={() => void history.reload()}>
+              Reload history
+            </button>
+          </div>
+        ) : history.state.status === "loading" ? (
+          <p aria-busy="true">Loading recent history…</p>
         ) : null}
         <nav className="history-links" aria-label="Contract navigation">
           <Link className="text-link" to={`/contracts/${contract.id}/history`}>
@@ -289,6 +355,16 @@ export function ContractDetailPage({
       </article>
     </main>
   );
+}
+
+function eligibleTransition(
+  role: "ADMIN" | "MEMBER",
+  status: ContractStatus,
+): TransitionTarget | null {
+  if (role !== "ADMIN") return null;
+  if (status === "DRAFT") return "ACTIVE";
+  if (status === "ACTIVE") return "CLOSED";
+  return null;
 }
 
 export function RouteNotFoundPage() {

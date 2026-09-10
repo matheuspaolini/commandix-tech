@@ -255,6 +255,22 @@ commit in one PostgreSQL transaction. HTTP never contacts RabbitMQ: success mean
 the transaction committed, not that notification processing has finished. The
 browser reloads current Contract state after a conflict without resubmitting.
 
+An Admin closes a current Active Contract through the same revision discipline:
+
+```sh
+curl -i -X POST http://localhost:8080/api/contracts/CONTRACT_ID/close \
+  -H "authorization: Bearer $token" \
+  -H 'content-type: application/json' \
+  --data '{"expectedRevision":2}'
+```
+
+The successful `200` response contains the updated Closed Contract. Closure and
+its `CLOSED` History entry commit atomically, preserve values and Template version,
+and advance the revision once. Closure creates no Outbox event or notification.
+Only Admins may close an Active Contract; Closed is terminal. Missing or foreign
+Contracts return `404 CONTRACT_NOT_FOUND`; stale revisions and invalid lifecycle
+transitions return the corresponding `409` conflict described above.
+
 ## Activation notification delivery
 
 The worker consumes the version-one activation event through this durable classic

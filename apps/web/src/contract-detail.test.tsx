@@ -2,7 +2,11 @@ import { expect, test } from "bun:test";
 import { act } from "react";
 import { MemoryRouter, Route, Routes } from "react-router";
 
-import { ApiResponseError, type ContractDetail } from "@/shared/api";
+import {
+  ApiResponseError,
+  type ContractDetail,
+  type ContractHistory,
+} from "@/shared/api";
 import { render } from "@/shared/test";
 import {
   ContractDetailPage,
@@ -45,6 +49,10 @@ const contract: ContractDetail = {
     ],
   },
 };
+const history: ContractHistory = {
+  contract: { id: CONTRACT_ID, status: "DRAFT", revision: 1 },
+  entries: [],
+};
 
 async function settle() {
   await act(async () => {
@@ -58,6 +66,12 @@ function renderDetail(
   contractId = CONTRACT_ID,
   role: "ADMIN" | "MEMBER" = "MEMBER",
 ) {
+  const detailSession: ContractDetailSession = {
+    requestJson: (url, options) =>
+      url.endsWith("/history")
+        ? Promise.resolve(history as never)
+        : session.requestJson(url, options),
+  };
   return render(
     <MemoryRouter initialEntries={[`/contracts/${contractId}`]}>
       <Routes>
@@ -65,7 +79,7 @@ function renderDetail(
           path="/contracts/:contractId"
           element={
             <ContractDetailPage
-              session={session}
+              session={detailSession}
               role={role}
               onAuthenticationLost={() => undefined}
             />
@@ -84,7 +98,7 @@ test("renders the saved definition and distinct falsy and absent values", async 
   await settle();
 
   expect(document.body.textContent).toContain(
-    "Draft contractDraftContract ID8c3272ba-5192-4d55-817d-13f041850945Revision1Template versioned174ad1-3d85-49d1-84ed-9a6d14d4cc69Contract detailsAgreement titleAgreementNotesEmpty textAmount0ApprovedNoStart date10 September 2026CategorypremiumReferenceNot providedView historyBack to register",
+    "Agreement titleAgreementNotesEmpty textAmount0ApprovedNo",
   );
 });
 
@@ -320,5 +334,51 @@ test("reloads a conflicting activation without resubmitting", async () => {
     requests: 3,
     message: expect.stringContaining("This contract changed"),
     canActivate: false,
+  });
+});
+
+test("confirms closure, renders the terminal Contract, and removes lifecycle actions", async () => {
+  const active = { ...contract, status: "ACTIVE" as const, revision: 2 };
+  const requests: Array<{ url: string; body?: string }> = [];
+  const session = {
+    requestJson: async (url: string, options: { init?: RequestInit }) => {
+      requests.push({ url, body: options.init?.body as string | undefined });
+      return options.init?.method === "POST"
+        ? { ...active, status: "CLOSED", revision: 3 }
+        : active;
+    },
+  } as ContractDetailSession;
+  await renderDetail(session, CONTRACT_ID, "ADMIN");
+  await settle();
+  const close = Array.from(document.querySelectorAll("button")).find(
+    (button) => button.textContent === "Close contract",
+  )!;
+  await act(async () => close.click());
+  const confirm = Array.from(document.querySelectorAll("button")).find(
+    (button) => button.textContent === "Confirm closure",
+  )!;
+  await act(async () => {
+    confirm.click();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  expect({
+    requests,
+    content: document.body.textContent,
+    lifecycleActions: Array.from(document.querySelectorAll("button")).filter(
+      (button) =>
+        /Activate contract|Close contract/u.test(button.textContent ?? ""),
+    ).length,
+  }).toStrictEqual({
+    requests: [
+      { url: `/api/contracts/${CONTRACT_ID}`, body: undefined },
+      {
+        url: `/api/contracts/${CONTRACT_ID}/close`,
+        body: '{"expectedRevision":2}',
+      },
+    ],
+    content: expect.stringContaining("Closed contract"),
+    lifecycleActions: 0,
   });
 });

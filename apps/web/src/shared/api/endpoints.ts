@@ -12,4 +12,5 @@ export const API_ENDPOINTS = {
     `/api/contracts/${contractId}/history`,
   activateContract: (contractId: string) =>
     `/api/contracts/${contractId}/activate`,
+  closeContract: (contractId: string) => `/api/contracts/${contractId}/close`,
 } as const;

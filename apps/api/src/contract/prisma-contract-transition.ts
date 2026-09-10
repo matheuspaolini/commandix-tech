@@ -4,6 +4,7 @@ import { DatabaseService } from "../database";
 import { canonicalTemplateDefinition } from "./template-definition";
 import type {
   ActivationPersistence,
+  ClosurePersistence,
   ContractTransitionTransaction,
   ContractTransitionTransactions,
   LockedContract,
@@ -53,28 +54,48 @@ class PrismaContractTransitionTransaction implements ContractTransitionTransacti
   }
 
   async persistActivation(input: ActivationPersistence): Promise<void> {
-    await this.transaction.contract.update({
-      where: { id: input.contract.id },
-      data: {
-        status: input.contract.status,
-        revision: input.contract.revision,
-      },
-    });
-    await this.transaction.contractHistory.create({
-      data: {
-        id: input.history.id,
-        tenantId: input.history.tenantId,
-        contractId: input.history.contractId,
-        actorId: input.history.actorId,
-        action: input.history.action,
-        revision: input.history.revision,
-        occurredAt: input.history.occurredAt,
-        beforeSnapshot: input.history.before as Prisma.InputJsonValue,
-        afterSnapshot: input.history.after as Prisma.InputJsonValue,
-      },
-    });
+    await this.persistContract(input.contract);
+    await this.persistHistory(input.history);
     await this.transaction.contractActivationOutbox.create({
       data: input.event,
+    });
+  }
+
+  async persistClosure(input: ClosurePersistence): Promise<void> {
+    await this.persistContract(input.contract);
+    await this.persistHistory(input.history);
+  }
+
+  private async persistContract(input: {
+    id: string;
+    tenantId: string;
+    status: "ACTIVE" | "CLOSED";
+    revision: number;
+  }): Promise<void> {
+    await this.transaction.contract.update({
+      where: { id: input.id, tenantId: input.tenantId },
+      data: {
+        status: input.status,
+        revision: input.revision,
+      },
+    });
+  }
+
+  private async persistHistory(
+    input: ActivationPersistence["history"] | ClosurePersistence["history"],
+  ): Promise<void> {
+    await this.transaction.contractHistory.create({
+      data: {
+        id: input.id,
+        tenantId: input.tenantId,
+        contractId: input.contractId,
+        actorId: input.actorId,
+        action: input.action,
+        revision: input.revision,
+        occurredAt: input.occurredAt,
+        beforeSnapshot: input.before as Prisma.InputJsonValue,
+        afterSnapshot: input.after as Prisma.InputJsonValue,
+      },
     });
   }
 }

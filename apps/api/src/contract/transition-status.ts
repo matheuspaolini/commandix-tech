@@ -20,11 +20,14 @@ export {
 export class ContractLifecycle {
   constructor(readonly status: ContractStatus) {}
 
-  transitionTo(target: "ACTIVE"): "ACTIVE" {
+  transitionTo(target: ContractStatus): TransitionTarget {
     if (this.status === "DRAFT" && target === "ACTIVE") return "ACTIVE";
+    if (this.status === "ACTIVE" && target === "CLOSED") return "CLOSED";
     throw new ContractStatusConflict();
   }
 }
+
+export type TransitionTarget = "ACTIVE" | "CLOSED";
 
 export type LockedContract = {
   id: string;
@@ -66,12 +69,33 @@ export type ActivationPersistence = {
   };
 };
 
+export type ClosurePersistence = {
+  contract: {
+    id: string;
+    tenantId: string;
+    status: "CLOSED";
+    revision: number;
+  };
+  history: {
+    id: string;
+    tenantId: string;
+    contractId: string;
+    actorId: string;
+    action: "CLOSED";
+    revision: number;
+    occurredAt: Date;
+    before: ContractSnapshot;
+    after: ContractSnapshot;
+  };
+};
+
 export interface ContractTransitionTransaction {
   findForUpdate(input: {
     tenantId: string;
     contractId: string;
   }): Promise<LockedContract | null>;
   persistActivation(input: ActivationPersistence): Promise<void>;
+  persistClosure(input: ClosurePersistence): Promise<void>;
 }
 
 export interface ContractTransitionTransactions {
@@ -80,16 +104,20 @@ export interface ContractTransitionTransactions {
   ): Promise<T>;
 }
 
-export type TransitionStatusCommand = {
+type TransitionCommandContext = {
   tenantId: string;
   actorId: string;
   contractId: string;
   expectedRevision: number;
-  targetStatus: "ACTIVE";
   correlationId: string;
 };
 
-export type TransitionedContract = ContractDetail & { eventId: string };
+export type TransitionStatusCommand = TransitionCommandContext &
+  ({ targetStatus: "ACTIVE" } | { targetStatus: "CLOSED" });
+
+export type TransitionStatusResult =
+  | { targetStatus: "ACTIVE"; contract: ContractDetail; eventId: string }
+  | { targetStatus: "CLOSED"; contract: ContractDetail };
 
 export interface TransitionClock {
   now(): Date;
@@ -109,7 +137,7 @@ export class TransitionStatus {
     private readonly ids: TransitionIdGenerator = UUIDS,
   ) {}
 
-  execute(command: TransitionStatusCommand): Promise<TransitionedContract> {
+  execute(command: TransitionStatusCommand): Promise<TransitionStatusResult> {
     return this.transactions.run(async (transaction) => {
       const current = await transaction.findForUpdate(command);
       if (!current) throw new ContractNotFound();
@@ -121,7 +149,6 @@ export class TransitionStatus {
       const revision = current.revision + 1;
       const occurredAt = this.clock.now();
       const historyId = this.ids.next();
-      const eventId = this.ids.next();
       const before: ContractSnapshot = {
         status: current.status,
         revision: current.revision,
@@ -130,6 +157,38 @@ export class TransitionStatus {
       };
       const after: ContractSnapshot = { ...before, status, revision };
 
+      const contract: ContractDetail = {
+        id: current.id,
+        status,
+        revision,
+        values: current.values,
+        templateVersion: current.templateVersion,
+      };
+      const history = {
+        id: historyId,
+        tenantId: current.tenantId,
+        contractId: current.id,
+        actorId: command.actorId,
+        revision,
+        occurredAt,
+        before,
+        after,
+      };
+
+      if (status === "CLOSED") {
+        await transaction.persistClosure({
+          contract: {
+            id: current.id,
+            tenantId: current.tenantId,
+            status,
+            revision,
+          },
+          history: { ...history, action: "CLOSED" },
+        });
+        return { targetStatus: "CLOSED", contract };
+      }
+
+      const eventId = this.ids.next();
       await transaction.persistActivation({
         contract: {
           id: current.id,
@@ -137,17 +196,7 @@ export class TransitionStatus {
           status,
           revision,
         },
-        history: {
-          id: historyId,
-          tenantId: current.tenantId,
-          contractId: current.id,
-          actorId: command.actorId,
-          action: "ACTIVATED",
-          revision,
-          occurredAt,
-          before,
-          after,
-        },
+        history: { ...history, action: "ACTIVATED" },
         event: {
           eventId,
           eventType: CONTRACT_ACTIVATED_EVENT_TYPE,
@@ -161,14 +210,7 @@ export class TransitionStatus {
         },
       });
 
-      return {
-        id: current.id,
-        status,
-        revision,
-        values: current.values,
-        templateVersion: current.templateVersion,
-        eventId,
-      };
+      return { targetStatus: "ACTIVE", contract, eventId };
     });
   }
 }

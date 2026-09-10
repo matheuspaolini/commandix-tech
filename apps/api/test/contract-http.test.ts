@@ -54,6 +54,12 @@ function activate(
     .set("Authorization", `Bearer ${token}`)
     .send({ expectedRevision });
 }
+function close(token: string, contractId: string, expectedRevision: unknown) {
+  return request(app.getHttpServer())
+    .post(`/contracts/${contractId}/close`)
+    .set("Authorization", `Bearer ${token}`)
+    .send({ expectedRevision });
+}
 async function removeTemplateVersionFixture(versionId: string) {
   if (!cleanupClient) throw new Error("Missing TEST_DATABASE_URL");
   await cleanupClient.$executeRawUnsafe(
@@ -516,6 +522,138 @@ describe("POST /contracts/:id/activate", () => {
         { status: 409, code: "CONTRACT_STATUS_CONFLICT" },
       ],
       persisted: { status: "ACTIVE", revision: 2, history: 2, outbox: 1 },
+    });
+  });
+});
+
+describe("POST /contracts/:id/close", () => {
+  test("atomically closes an Active Contract without another Outbox event", async () => {
+    const created = await create(tokens.get("acme:admin")!, {
+      title: "Closure contract",
+      "effective-date": "2028-01-01",
+    });
+    const activated = await activate(
+      tokens.get("acme:admin")!,
+      created.body.id,
+      1,
+    );
+    const response = await close(tokens.get("acme:admin")!, created.body.id, 2);
+    const persisted = await client.contract.findUniqueOrThrow({
+      where: { id: created.body.id },
+      include: {
+        history: { orderBy: { revision: "asc" } },
+        activationOutbox: true,
+      },
+    });
+
+    expect({
+      response: { status: response.status, body: response.body },
+      persisted: {
+        status: persisted.status,
+        revision: persisted.revision,
+        valuesPreserved:
+          JSON.stringify(persisted.values) ===
+          JSON.stringify(activated.body.values),
+        templateVersionPreserved:
+          persisted.templateVersionId === activated.body.templateVersion.id,
+        actions: persisted.history.map(({ action }) => action),
+        closure: {
+          revision: persisted.history[2]?.revision,
+          before: persisted.history[2]?.beforeSnapshot,
+          after: persisted.history[2]?.afterSnapshot,
+        },
+        outbox: persisted.activationOutbox.length,
+      },
+    }).toStrictEqual({
+      response: {
+        status: 200,
+        body: {
+          id: created.body.id,
+          status: "CLOSED",
+          revision: 3,
+          values: expect.any(Object),
+          templateVersion: {
+            id: created.body.templateVersionId,
+            fields: expect.any(Array),
+          },
+        },
+      },
+      persisted: {
+        status: "CLOSED",
+        revision: 3,
+        valuesPreserved: true,
+        templateVersionPreserved: true,
+        actions: ["CREATED", "ACTIVATED", "CLOSED"],
+        closure: {
+          revision: 3,
+          before: expect.objectContaining({
+            status: "ACTIVE",
+            revision: 2,
+          }),
+          after: expect.objectContaining({
+            status: "CLOSED",
+            revision: 3,
+          }),
+        },
+        outbox: 1,
+      },
+    });
+  });
+
+  test("permits one concurrent closure and rejects invalid closure without extra writes", async () => {
+    const own = await create(tokens.get("acme:admin")!, {
+      title: "Closure conflicts",
+      "effective-date": "2028-01-01",
+    });
+    const foreignContract = await create(tokens.get("globex:admin")!, {
+      title: "Foreign closure",
+      "effective-date": "2028-01-01",
+    });
+    const skipped = await close(tokens.get("acme:admin")!, own.body.id, 1);
+    await activate(tokens.get("acme:admin")!, own.body.id, 1);
+    const member = await close(tokens.get("acme:member")!, own.body.id, 2);
+    const foreign = await close(
+      tokens.get("acme:admin")!,
+      foreignContract.body.id,
+      1,
+    );
+    const missing = await close(
+      tokens.get("acme:admin")!,
+      crypto.randomUUID(),
+      1,
+    );
+    const concurrent = await Promise.all([
+      close(tokens.get("acme:admin")!, own.body.id, 2),
+      close(tokens.get("acme:admin")!, own.body.id, 2),
+    ]);
+    const repeated = await close(tokens.get("acme:admin")!, own.body.id, 3);
+    const persisted = await client.contract.findUniqueOrThrow({
+      where: { id: own.body.id },
+      include: { history: true, activationOutbox: true },
+    });
+
+    expect({
+      skipped: [skipped.status, skipped.body.code],
+      member: member.status,
+      hidden: [foreign, missing].map(({ status, body }) => [status, body.code]),
+      concurrent: concurrent.map(({ status }) => status).sort(),
+      repeated: [repeated.status, repeated.body.code],
+      persisted: [
+        persisted.status,
+        persisted.revision,
+        persisted.history.length,
+        persisted.activationOutbox.length,
+      ],
+    }).toStrictEqual({
+      skipped: [409, "CONTRACT_STATUS_CONFLICT"],
+      member: 403,
+      hidden: [
+        [404, "CONTRACT_NOT_FOUND"],
+        [404, "CONTRACT_NOT_FOUND"],
+      ],
+      concurrent: [200, 409],
+      repeated: [409, "CONTRACT_STATUS_CONFLICT"],
+      persisted: ["CLOSED", 3, 3, 1],
     });
   });
 });
