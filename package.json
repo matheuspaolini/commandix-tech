@@ -24,7 +24,7 @@
     "typecheck": "bun run generate && bun run --filter '*' typecheck",
     "generate": "bun run --filter @commandix/database generate",
     "build": "bun run typecheck && bun run --filter @commandix/web build",
-    "test": "bun run --filter @commandix/api test && bun run --filter @commandix/worker test && bun run --filter @commandix/web test",
+    "test": "FORCE_COLOR=1 bun run --filter @commandix/api test && bun run --filter @commandix/worker test && bun run --filter @commandix/web test",
     "db:migrate": "bun run --filter @commandix/database migrate",
     "db:seed": "bun run --filter @commandix/api seed",
     "check": "bun run format:check && bun run typecheck && bun run build && bun run test",

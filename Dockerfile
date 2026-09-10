@@ -8,6 +8,7 @@ COPY --chown=bun:bun apps/api/package.json apps/api/package.json
 COPY --chown=bun:bun apps/worker/package.json apps/worker/package.json
 COPY --chown=bun:bun apps/web/package.json apps/web/package.json
 COPY --chown=bun:bun packages/database/package.json packages/database/package.json
+COPY --chown=bun:bun packages/contract-events/package.json packages/contract-events/package.json
 RUN bun install --frozen-lockfile
 COPY --chown=bun:bun . .
 RUN bun run build
