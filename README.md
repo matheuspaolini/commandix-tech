@@ -4,7 +4,7 @@ A contract workspace built with a modular NestJS API, a separate NestJS worker,
 React/TypeScript, PostgreSQL/Prisma, and RabbitMQ. Bun 1.4.0 runs the backend,
 manages packages/workspaces, and executes tools and tests. This baseline provides a visible workspace shell,
 dependency health, correlated JSON request logs, sanitized HTTP errors, and
-tenant-scoped Admin authentication. Contract operations are introduced in later slices.
+tenant-scoped authentication and audited Draft creation.
 
 Backend TypeScript runs directly in Bun; TypeScript checks types without emitting
 JavaScript, and Vite builds browser assets served by Nginx. A Node installation is
@@ -62,7 +62,8 @@ URL-safe (letters, digits, underscore). Keep real credentials out of Git.
 - `commandix_runtime` is used by the API, worker, and seed. It can connect and use
   the schema, with DML privileges on future domain tables, but cannot create
   schema objects, assume the migration role, or administer PostgreSQL. It receives
-  no TRUNCATE grant. History-specific database protections arrive with that schema.
+  no TRUNCATE grant. Contract History also rejects update and delete through
+  restricted grants and a database trigger.
 
 The baseline SQL migration installs default runtime grants without business tables.
 Prisma's schema and versioned SQL migrations live in `packages/database/prisma`;
@@ -174,6 +175,23 @@ curl -i http://localhost:8080/api/templates/active \
   -H "authorization: Bearer $token"
 ```
 
+Both roles can create a revision-one Draft from that active Template version.
+Defaults apply only to omitted values, preserving explicit `false`, `0`, and
+valid empty text:
+
+```sh
+curl -i http://localhost:8080/api/contracts \
+  -H "authorization: Bearer $token" \
+  -H 'content-type: application/json' \
+  --data '{"values":{"title":"Supplier agreement","amount":0,"effective-date":"2028-02-29","approved":false,"category":"standard"}}'
+```
+
+Success is `201 Created`, includes `Location: /contracts/{id}`, and returns the
+Contract ID, `DRAFT` status, revision `1`, and exact Template-version ID. Invalid
+values return `400 INVALID_CONTRACT_VALUES` with keyed issue codes. A Tenant
+without an active Template receives `409 ACTIVE_TEMPLATE_REQUIRED`. Contract and
+creation History commit atomically; creation History has no before snapshot.
+
 ## Develop and verify
 
 Install Bun 1.4.0 for host commands (Docker Compose and Bash are also needed for
@@ -247,8 +265,8 @@ routes. Compose smoke tests cover actual dependency failures and restoration.
 
 The API owns Auth, Tenant, and Contract modules with framework-independent
 normalization, password, token, onboarding, Template validation, and persistence
-seams. The worker remains idle; no queues, consumers, or Contract mutation
-endpoints are installed yet. Future
+seams. The worker remains idle; no queues or consumers are installed yet. Draft
+creation is the only Contract mutation endpoint in this slice. Future
 activation delivery uses a transactional outbox, one publisher, and idempotent
 notification persistence. Contract screens, immutable history, and tenant
 enforcement for later domain resources arrive in their introducing slices.

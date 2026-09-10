@@ -6,12 +6,30 @@ import { ACTIVE_TEMPLATE_REPOSITORY } from "./active-template.repository";
 import { PrismaActiveTemplateRepository } from "./prisma-active-template.repository";
 import { ReadActiveTemplate } from "./read-active-template";
 import { TemplateController } from "./template.controller";
+import { ContractController } from "./contract.controller";
+import { ContractCreationLogger } from "./contract-creation.logger";
+import {
+  CONTRACT_CREATION_TRANSACTIONS,
+  CreateContract,
+} from "./create-contract";
+import { PrismaContractCreationTransactions } from "./prisma-contract-creation";
 
 @Module({
   imports: [AuthModule],
-  controllers: [TemplateController],
+  controllers: [TemplateController, ContractController],
   providers: [
     RolesGuard,
+    ContractCreationLogger,
+    PrismaContractCreationTransactions,
+    {
+      provide: CONTRACT_CREATION_TRANSACTIONS,
+      useExisting: PrismaContractCreationTransactions,
+    },
+    {
+      provide: CreateContract,
+      useFactory: (transactions) => new CreateContract(transactions),
+      inject: [CONTRACT_CREATION_TRANSACTIONS],
+    },
     PrismaActiveTemplateRepository,
     {
       provide: ACTIVE_TEMPLATE_REPOSITORY,

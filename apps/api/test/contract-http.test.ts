@@ -1,0 +1,195 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { createPrismaClient } from "@commandix/database";
+import type { INestApplication } from "@nestjs/common";
+import request from "supertest";
+import { createApp } from "../src/app";
+
+Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
+Bun.env.AUTH_ALLOWED_ORIGINS ??= "http://localhost:8080";
+Bun.env.AUTH_COOKIE_SECURE ??= "false";
+
+const PASSWORD = "Commandix-demo-2026!";
+const client = createPrismaClient();
+let app: INestApplication;
+const tokens = new Map<string, string>();
+
+async function signIn(slug: string, email: string) {
+  const response = await request(app.getHttpServer())
+    .post("/auth/sign-in")
+    .send({ slug, email, password: PASSWORD });
+  return response.body.accessToken as string;
+}
+function create(token: string, values: unknown, extras: object = {}) {
+  return request(app.getHttpServer())
+    .post("/contracts")
+    .set("Authorization", `Bearer ${token}`)
+    .send({ values, ...extras });
+}
+
+beforeAll(async () => {
+  app = await createApp();
+  await app.init();
+  for (const slug of ["acme", "globex"])
+    for (const role of ["admin", "member"])
+      tokens.set(`${slug}:${role}`, await signIn(slug, `${role}@${slug}.test`));
+});
+afterAll(async () => {
+  await Promise.all([app.close(), client.$disconnect()]);
+});
+
+describe("POST /contracts", () => {
+  test("allows both roles and keeps each Contract in its authenticated Tenant", async () => {
+    const responses = await Promise.all([
+      create(tokens.get("acme:admin")!, {
+        title: "Admin contract",
+        "effective-date": "2028-02-29",
+      }),
+      create(tokens.get("globex:member")!, {
+        title: "Member contract",
+        "effective-date": "2027-03-01",
+        approved: false,
+        amount: 0,
+      }),
+    ]);
+    const persisted = await client.contract.findMany({
+      where: { id: { in: responses.map((response) => response.body.id) } },
+      include: { tenant: { select: { slug: true } }, history: true },
+      orderBy: { tenant: { slug: "asc" } },
+    });
+    expect({
+      responses: responses.map((response) => ({
+        status: response.status,
+        location: response.headers.location,
+        body: response.body,
+      })),
+      persisted: persisted.map((contract) => ({
+        tenant: contract.tenant.slug,
+        status: contract.status,
+        revision: contract.revision,
+        values: contract.values,
+        historyCount: contract.history.length,
+        before: contract.history[0]?.beforeSnapshot,
+        after: contract.history[0]?.afterSnapshot,
+      })),
+    }).toStrictEqual({
+      responses: responses.map((response) => ({
+        status: 201,
+        location: `/contracts/${response.body.id}`,
+        body: {
+          id: response.body.id,
+          status: "DRAFT",
+          revision: 1,
+          templateVersionId: response.body.templateVersionId,
+        },
+      })),
+      persisted: [
+        {
+          tenant: "acme",
+          status: "DRAFT",
+          revision: 1,
+          values: {
+            title: "Admin contract",
+            amount: 0,
+            "effective-date": "2028-02-29",
+            approved: false,
+            category: "standard",
+          },
+          historyCount: 1,
+          before: null,
+          after: expect.objectContaining({ status: "DRAFT", revision: 1 }),
+        },
+        {
+          tenant: "globex",
+          status: "DRAFT",
+          revision: 1,
+          values: {
+            title: "Member contract",
+            amount: 0,
+            "effective-date": "2027-03-01",
+            approved: false,
+            category: "standard",
+          },
+          historyCount: 1,
+          before: null,
+          after: expect.objectContaining({ status: "DRAFT", revision: 1 }),
+        },
+      ],
+    });
+  });
+
+  test("returns deterministic validation issues without writing", async () => {
+    const tenant = await client.tenant.findUniqueOrThrow({
+      where: { slug: "acme" },
+    });
+    const before = await client.contract.count({
+      where: { tenantId: tenant.id },
+    });
+    const response = await create(tokens.get("acme:admin")!, {
+      title: "   ",
+      "effective-date": "2027-02-29",
+      unexpected: true,
+    });
+    const after = await client.contract.count({
+      where: { tenantId: tenant.id },
+    });
+    expect({
+      status: response.status,
+      code: response.body.code,
+      issues: response.body.issues,
+      unchanged: after === before,
+    }).toStrictEqual({
+      status: 400,
+      code: "INVALID_CONTRACT_VALUES",
+      issues: [
+        { key: "title", code: "INVALID_TEXT" },
+        { key: "effective-date", code: "INVALID_DATE" },
+        { key: "unexpected", code: "UNKNOWN_FIELD" },
+      ],
+      unchanged: true,
+    });
+  });
+
+  test("rejects server-owned input properties", async () => {
+    const response = await create(
+      tokens.get("acme:member")!,
+      { title: "A", "effective-date": "2027-01-01" },
+      { tenantId: "globex", revision: 9 },
+    );
+    expect({
+      status: response.status,
+      error: response.body.error,
+    }).toStrictEqual({ status: 400, error: "Bad Request" });
+  });
+
+  test("requires authentication", async () => {
+    const response = await request(app.getHttpServer())
+      .post("/contracts")
+      .send({ values: {} });
+    expect({
+      status: response.status,
+      error: response.body.error,
+    }).toStrictEqual({ status: 401, error: "Unauthorized" });
+  });
+
+  test("returns the active-Template prerequisite conflict without writes", async () => {
+    const slug = `contractless-${Bun.randomUUIDv7().replaceAll("-", "")}`;
+    await request(app.getHttpServer())
+      .post("/onboarding")
+      .send({ slug, email: "admin@example.com", password: PASSWORD });
+    const token = await signIn(slug, "admin@example.com");
+    const tenant = await client.tenant.findUniqueOrThrow({ where: { slug } });
+    const response = await create(token, {});
+    const persisted = await client.contract.count({
+      where: { tenantId: tenant.id },
+    });
+    expect({
+      status: response.status,
+      code: response.body.code,
+      persisted,
+    }).toStrictEqual({
+      status: 409,
+      code: "ACTIVE_TEMPLATE_REQUIRED",
+      persisted: 0,
+    });
+  });
+});

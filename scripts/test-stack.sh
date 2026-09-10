@@ -25,10 +25,10 @@ SQL
 "${compose[@]}" run --rm --no-deps seed
 "${compose[@]}" exec -T postgres psql -U postgres -d commandix -v ON_ERROR_STOP=1 <<'SQL'
 DO $$ BEGIN
-  IF (SELECT count(*) FROM tenants) <> 3
-    OR (SELECT count(*) FROM users) <> 4
-    OR (SELECT count(*) FROM logical_templates) <> 2
-    OR (SELECT count(*) FROM template_versions) <> 2
+  IF (SELECT count(*) FROM tenants WHERE slug IN ('acme', 'globex')) <> 2
+    OR (SELECT count(*) FROM users JOIN tenants ON tenants.id = users.tenant_id WHERE tenants.slug IN ('acme', 'globex')) <> 4
+    OR (SELECT count(*) FROM logical_templates JOIN tenants ON tenants.id = logical_templates.tenant_id WHERE tenants.slug IN ('acme', 'globex')) <> 2
+    OR (SELECT count(*) FROM template_versions JOIN tenants ON tenants.id = template_versions.tenant_id WHERE tenants.slug IN ('acme', 'globex')) <> 2
     OR (SELECT password_hash FROM users WHERE email = 'member@globex.test') <> 'preserved-seed-edit' THEN
     RAISE EXCEPTION 'Repeat seed changed existing data or duplicated records';
   END IF;

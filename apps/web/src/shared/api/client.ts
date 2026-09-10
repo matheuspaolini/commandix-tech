@@ -10,7 +10,10 @@ export type RequestJsonOptions<Value> = {
 };
 
 export class ApiResponseError extends Error {
-  constructor(readonly status: number) {
+  constructor(
+    readonly status: number,
+    readonly body?: unknown,
+  ) {
     super(`API request failed with status ${status}`);
   }
 }
@@ -24,7 +27,15 @@ export class Client {
   ): Promise<Value> {
     const response = await this.fetcher(url, init);
 
-    if (!response.ok) throw new ApiResponseError(response.status);
+    if (!response.ok) {
+      let errorBody: unknown;
+      try {
+        errorBody = await response.json();
+      } catch {
+        errorBody = undefined;
+      }
+      throw new ApiResponseError(response.status, errorBody);
+    }
 
     const body: unknown = await response.json();
 

@@ -1,4 +1,4 @@
-import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
+import { type ChangeEvent, type SubmitEvent, useEffect, useState } from "react";
 
 import {
   API_ENDPOINTS,
@@ -7,6 +7,7 @@ import {
   type SignInForm,
 } from "@/shared/api";
 import { PageShell } from "@/shared/ui";
+import { ContractCreationForm } from "./contract-creation-form";
 
 type Identity = {
   user: { id: string; email: string };
@@ -40,7 +41,7 @@ export function Workspace() {
     };
   }, []);
 
-  async function signIn(event: FormEvent<HTMLFormElement>) {
+  async function signIn(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     setState({ status: "signingIn" });
     try {
@@ -85,6 +86,7 @@ export function Workspace() {
           <button type="button" onClick={signOut}>
             Sign out
           </button>
+          <ContractCreationForm session={browserSession} />
         </main>
       </PageShell>
     );

@@ -99,6 +99,7 @@ label {
   font-weight: 650;
 }
 input,
+select,
 button {
   border: 1px solid #9aa0a4;
   border-radius: 0;
@@ -107,6 +108,7 @@ button {
   padding: 0.55rem 0.7rem;
 }
 input:focus-visible,
+select:focus-visible,
 button:focus-visible {
   outline: 2px solid #233e59;
   outline-offset: 3px;
@@ -120,13 +122,44 @@ button {
   font-weight: 700;
 }
 button:disabled,
-input:disabled {
+input:disabled,
+select:disabled {
   cursor: wait;
   opacity: 0.65;
 }
 .form-error {
   margin: 1rem 0 0;
   color: #972f2f;
+}
+.creation-card {
+  max-width: 42rem;
+}
+.creation-card h2 {
+  font-family: "Iowan Old Style", "Palatino Linotype", serif;
+  font-weight: 400;
+  font-size: 2rem;
+}
+.field {
+  display: grid;
+  gap: 0.35rem;
+}
+.include-value {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.include-value input {
+  min-height: auto;
+}
+.field-error {
+  margin: 0;
+  color: #972f2f;
+  font-size: 0.875rem;
+}
+.save-confirmation {
+  border: 1px solid #52705a;
+  padding: 1rem;
+  color: #315139;
 }
 footer {
   border-top: 1px solid #d4d0c5;

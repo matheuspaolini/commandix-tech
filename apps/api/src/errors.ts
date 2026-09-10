@@ -8,6 +8,20 @@ import { STATUS_CODES } from "node:http";
 import type { Response } from "express";
 import { requestContext } from "./http";
 
+export type PublicErrorBody = {
+  code: "ACTIVE_TEMPLATE_REQUIRED" | "INVALID_CONTRACT_VALUES";
+  issues?: { key?: string; code: string }[];
+};
+
+export class PublicHttpException extends HttpException {
+  constructor(
+    status: number,
+    readonly publicBody: PublicErrorBody,
+  ) {
+    super(publicBody, status);
+  }
+}
+
 @Catch()
 export class SanitizedErrors implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
@@ -18,6 +32,7 @@ export class SanitizedErrors implements ExceptionFilter {
       statusCode,
       error: STATUS_CODES[statusCode] ?? "Internal Server Error",
       correlationId: requestContext.correlationId(),
+      ...(exception instanceof PublicHttpException ? exception.publicBody : {}),
     });
   }
 }
