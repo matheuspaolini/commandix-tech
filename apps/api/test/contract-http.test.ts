@@ -34,6 +34,16 @@ function read(token: string, contractId: string) {
     .get(`/contracts/${contractId}`)
     .set("Authorization", `Bearer ${token}`);
 }
+function list(token: string, query = "") {
+  return request(app.getHttpServer())
+    .get(`/contracts${query}`)
+    .set("Authorization", `Bearer ${token}`);
+}
+function history(token: string, contractId: string) {
+  return request(app.getHttpServer())
+    .get(`/contracts/${contractId}/history`)
+    .set("Authorization", `Bearer ${token}`);
+}
 function activate(
   token: string,
   contractId: string,
@@ -109,7 +119,7 @@ describe("POST /contracts", () => {
       })),
     }).toStrictEqual({
       responses: responses.map((response) => ({
-        status: 200,
+        status: 201,
         location: `/contracts/${response.body.id}`,
         body: {
           id: response.body.id,
@@ -415,7 +425,7 @@ describe("POST /contracts/:id/activate", () => {
       },
     }).toStrictEqual({
       response: {
-        status: 201,
+        status: 200,
         body: {
           id: created.body.id,
           status: "ACTIVE",
@@ -507,5 +517,189 @@ describe("POST /contracts/:id/activate", () => {
       ],
       persisted: { status: "ACTIVE", revision: 2, history: 2, outbox: 1 },
     });
+  });
+});
+
+describe("GET /contracts", () => {
+  test("paginates deterministically without exposing foreign Contracts or totals", async () => {
+    const created = await Promise.all(
+      ["a", "b", "c"].map((suffix) =>
+        create(tokens.get("acme:admin")!, {
+          title: `Register ${suffix}`,
+          "effective-date": "2028-01-01",
+        }),
+      ),
+    );
+    const foreign = await create(tokens.get("globex:admin")!, {
+      title: "Foreign register",
+      "effective-date": "2028-01-01",
+    });
+    const tiedAt = new Date("2099-01-01T00:00:00.000Z");
+    await client.contract.updateMany({
+      where: { id: { in: created.map((response) => response.body.id) } },
+      data: { createdAt: tiedAt },
+    });
+    await client.contract.update({
+      where: { id: foreign.body.id },
+      data: { createdAt: tiedAt },
+    });
+
+    const first = await list(tokens.get("acme:member")!, "?limit=2");
+    const second = await list(
+      tokens.get("acme:admin")!,
+      `?limit=2&after=${encodeURIComponent(first.body.nextCursor)}`,
+    );
+    const ownIds = created
+      .map((response) => response.body.id)
+      .sort()
+      .reverse();
+
+    expect({
+      first: {
+        status: first.status,
+        keys: Object.keys(first.body).sort(),
+        ids: first.body.items.map((item: { id: string }) => item.id),
+        nextCursor: typeof first.body.nextCursor,
+      },
+      second: {
+        status: second.status,
+        firstId: second.body.items[0]?.id,
+      },
+      foreignIncluded: [...first.body.items, ...second.body.items].some(
+        (item: { id: string }) => item.id === foreign.body.id,
+      ),
+    }).toStrictEqual({
+      first: {
+        status: 200,
+        keys: ["items", "nextCursor"],
+        ids: ownIds.slice(0, 2),
+        nextCursor: "string",
+      },
+      second: { status: 200, firstId: ownIds[2] },
+      foreignIncluded: false,
+    });
+  });
+
+  test("uses the default limit and rejects every invalid page shape", async () => {
+    const accepted = await list(tokens.get("acme:admin")!);
+    const invalid = await Promise.all(
+      [
+        "?limit=0",
+        "?limit=1.5",
+        "?limit=101",
+        "?limit=1&limit=2",
+        "?after=",
+        "?after=not-a-cursor",
+        "?unknown=true",
+      ].map((query) => list(tokens.get("acme:admin")!, query)),
+    );
+
+    expect({
+      accepted: {
+        status: accepted.status,
+        withinDefault: accepted.body.items.length <= 20,
+      },
+      invalid: invalid.map((response) => ({
+        status: response.status,
+        code: response.body.code,
+      })),
+    }).toStrictEqual({
+      accepted: { status: 200, withinDefault: true },
+      invalid: Array.from({ length: 7 }, () => ({
+        status: 400,
+        code: "INVALID_PAGINATION",
+      })),
+    });
+  });
+});
+
+describe("GET /contracts/:id/history", () => {
+  test("returns a complete version-aware timeline to both roles", async () => {
+    const created = await create(tokens.get("acme:admin")!, {
+      title: "History contract",
+      "effective-date": "2028-02-29",
+      approved: false,
+      amount: 0,
+    });
+    await activate(tokens.get("acme:admin")!, created.body.id, 1);
+    const responses = await Promise.all([
+      history(tokens.get("acme:admin")!, created.body.id),
+      history(tokens.get("acme:member")!, created.body.id),
+    ]);
+
+    expect(
+      responses.map((response) => ({
+        status: response.status,
+        contract: response.body.contract,
+        entries: response.body.entries.map((entry: any) => ({
+          action: entry.action,
+          revision: entry.revision,
+          occurredAt: entry.occurredAt,
+          actor: entry.actor,
+          before: entry.before,
+          after: entry.after,
+        })),
+      })),
+    ).toStrictEqual(
+      responses.map(() => ({
+        status: 200,
+        contract: { id: created.body.id, status: "ACTIVE", revision: 2 },
+        entries: [
+          {
+            action: "CREATED",
+            revision: 1,
+            occurredAt: expect.any(String),
+            actor: {
+              id: expect.any(String),
+              email: "admin@acme.test",
+            },
+            before: null,
+            after: expect.objectContaining({
+              status: "DRAFT",
+              revision: 1,
+              values: expect.objectContaining({ approved: false, amount: 0 }),
+              templateVersion: {
+                id: created.body.templateVersionId,
+                fields: expect.any(Array),
+              },
+            }),
+          },
+          {
+            action: "ACTIVATED",
+            revision: 2,
+            occurredAt: expect.any(String),
+            actor: {
+              id: expect.any(String),
+              email: "admin@acme.test",
+            },
+            before: expect.objectContaining({ status: "DRAFT", revision: 1 }),
+            after: expect.objectContaining({ status: "ACTIVE", revision: 2 }),
+          },
+        ],
+      })),
+    );
+  });
+
+  test("hides foreign and missing History behind the same 404", async () => {
+    const foreign = await create(tokens.get("globex:member")!, {
+      title: "Foreign history",
+      "effective-date": "2028-01-01",
+    });
+    const responses = await Promise.all([
+      history(tokens.get("acme:admin")!, foreign.body.id),
+      history(tokens.get("acme:member")!, foreign.body.id),
+      history(tokens.get("acme:admin")!, crypto.randomUUID()),
+    ]);
+
+    expect(
+      responses.map((response) => ({
+        status: response.status,
+        code: response.body.code,
+      })),
+    ).toStrictEqual([
+      { status: 404, code: "CONTRACT_NOT_FOUND" },
+      { status: 404, code: "CONTRACT_NOT_FOUND" },
+      { status: 404, code: "CONTRACT_NOT_FOUND" },
+    ]);
   });
 });

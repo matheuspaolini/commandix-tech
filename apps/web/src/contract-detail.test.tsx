@@ -84,7 +84,7 @@ test("renders the saved definition and distinct falsy and absent values", async 
   await settle();
 
   expect(document.body.textContent).toContain(
-    "Draft contractDraftContract ID8c3272ba-5192-4d55-817d-13f041850945Revision1Template versioned174ad1-3d85-49d1-84ed-9a6d14d4cc69Contract detailsAgreement titleAgreementNotesEmpty textAmount0ApprovedNoStart date10 September 2026CategorypremiumReferenceNot providedBack to home",
+    "Draft contractDraftContract ID8c3272ba-5192-4d55-817d-13f041850945Revision1Template versioned174ad1-3d85-49d1-84ed-9a6d14d4cc69Contract detailsAgreement titleAgreementNotesEmpty textAmount0ApprovedNoStart date10 September 2026CategorypremiumReferenceNot providedView historyBack to register",
   );
 });
 

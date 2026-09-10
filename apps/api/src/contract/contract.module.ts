@@ -24,6 +24,13 @@ import {
   CONTRACT_TRANSITION_TRANSACTIONS,
   TransitionStatus,
 } from "./transition-status";
+import { PrismaContractRegisterRepository } from "./prisma-contract-register.repository";
+import { CONTRACT_REGISTER_REPOSITORY, ListContracts } from "./list-contracts";
+import { PrismaContractHistoryRepository } from "./prisma-contract-history.repository";
+import {
+  CONTRACT_HISTORY_REPOSITORY,
+  ReadContractHistory,
+} from "./read-contract-history";
 
 @Module({
   imports: [AuthModule],
@@ -35,6 +42,8 @@ import {
     PrismaContractTransitionTransactions,
     PrismaContractCreationTransactions,
     PrismaContractDetailRepository,
+    PrismaContractRegisterRepository,
+    PrismaContractHistoryRepository,
     {
       provide: CONTRACT_TRANSITION_TRANSACTIONS,
       useExisting: PrismaContractTransitionTransactions,
@@ -61,6 +70,24 @@ import {
       provide: ReadContractDetail,
       useFactory: (contracts) => new ReadContractDetail(contracts),
       inject: [CONTRACT_DETAIL_REPOSITORY],
+    },
+    {
+      provide: CONTRACT_REGISTER_REPOSITORY,
+      useExisting: PrismaContractRegisterRepository,
+    },
+    {
+      provide: ListContracts,
+      useFactory: (contracts) => new ListContracts(contracts),
+      inject: [CONTRACT_REGISTER_REPOSITORY],
+    },
+    {
+      provide: CONTRACT_HISTORY_REPOSITORY,
+      useExisting: PrismaContractHistoryRepository,
+    },
+    {
+      provide: ReadContractHistory,
+      useFactory: (history) => new ReadContractHistory(history),
+      inject: [CONTRACT_HISTORY_REPOSITORY],
     },
     PrismaActiveTemplateRepository,
     {

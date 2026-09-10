@@ -6,12 +6,20 @@ import {
   ApiResponseError,
   type AuthenticatedJsonOptions,
   type ContractDetail,
-  type ContractStatus,
-  type ContractValues,
   isContractDetail,
   isUuidV4,
-  type TemplateField,
 } from "@/shared/api";
+import {
+  formatCalendarDate,
+  formatContractStatus,
+  formatContractValue,
+} from "./contract-presentation";
+
+export {
+  formatCalendarDate,
+  formatContractStatus,
+  formatContractValue,
+} from "./contract-presentation";
 
 type ContractDetailState =
   | { status: "loading" }
@@ -26,21 +34,6 @@ type ActivationState =
   | { status: "succeeded" }
   | { status: "failed" }
   | { status: "conflict"; reloadFailed: boolean };
-
-const MONTHS = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-] as const;
 
 export interface ContractDetailSession {
   requestJson<Value>(
@@ -285,9 +278,14 @@ export function ContractDetailPage({
             )}
           </section>
         ) : null}
-        <Link className="text-link" to="/">
-          Back to home
-        </Link>
+        <nav className="history-links" aria-label="Contract navigation">
+          <Link className="text-link" to={`/contracts/${contract.id}/history`}>
+            View history
+          </Link>
+          <Link className="text-link" to="/">
+            Back to register
+          </Link>
+        </nav>
       </article>
     </main>
   );
@@ -311,33 +309,6 @@ export function RouteNotFoundPage() {
       </section>
     </main>
   );
-}
-
-export function formatContractStatus(status: ContractStatus): string {
-  return status[0] + status.slice(1).toLowerCase();
-}
-
-export function formatCalendarDate(value: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return value;
-  const month = MONTHS[Number(match[2]) - 1];
-  if (!month) return value;
-  return `${Number(match[3])} ${month} ${match[1]}`;
-}
-
-export function formatContractValue(input: {
-  field: TemplateField;
-  values: ContractValues;
-}): string {
-  const { field, values } = input;
-  if (!Object.hasOwn(values, field.key)) return "Not provided";
-  const value = values[field.key]!;
-  if (field.type === "text" && value === "") return "Empty text";
-  if (field.type === "boolean" && typeof value === "boolean")
-    return value ? "Yes" : "No";
-  if (field.type === "date" && typeof value === "string")
-    return formatCalendarDate(value);
-  return String(value);
 }
 
 function ContractNotFound() {

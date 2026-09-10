@@ -332,6 +332,152 @@ footer {
   border-top: 1px solid #d4d0c5;
   padding-block: 1.5rem;
 }
+.contract-register h2,
+.history-section h2 {
+  margin-block: 0.25rem 1.5rem;
+  font-family: "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: 2rem;
+  font-weight: 400;
+}
+.register-list,
+.history-timeline {
+  display: grid;
+  gap: 1rem;
+  padding: 0;
+  list-style: none;
+}
+.register-row,
+.history-event > article {
+  border: 1px solid #d4d0c5;
+  background: #fbf9f3;
+  padding: 1.25rem;
+}
+.register-row-heading,
+.history-event-heading,
+.register-links,
+.history-links,
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+}
+.register-row code,
+.history-main code {
+  overflow-wrap: anywhere;
+}
+.register-metadata,
+.snapshot-metadata {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+}
+.register-metadata div,
+.snapshot-metadata div {
+  display: flex;
+  gap: 0.4rem;
+}
+.register-metadata dt,
+.snapshot-metadata dt {
+  color: #626971;
+  font-weight: 650;
+}
+.register-metadata dd,
+.snapshot-metadata dd {
+  margin: 0;
+}
+.register-links {
+  justify-content: flex-start;
+}
+.register-links a,
+.history-links a {
+  font-size: 1rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.pagination {
+  justify-content: flex-start;
+  margin-top: 1.5rem;
+}
+.pagination button,
+.register-message button {
+  margin-top: 0;
+}
+.register-message {
+  border: 1px solid #d4d0c5;
+  padding: 1rem;
+}
+.history-main {
+  width: min(100% - 3rem, 68rem);
+}
+.history-heading {
+  width: 100%;
+  margin: 0;
+  padding: 0 0 2rem;
+  align-items: start;
+}
+.history-heading h1 {
+  margin-bottom: 0.75rem;
+}
+.history-section {
+  border-left: 0;
+  padding-left: 0;
+}
+.history-event {
+  position: relative;
+  border-left: 3px solid #233e59;
+  padding-left: 1.25rem;
+}
+.history-event-heading {
+  width: 100%;
+  margin: 0;
+  padding: 0 0 1rem;
+  border-bottom: 1px solid #d4d0c5;
+}
+.history-event-heading h3 {
+  margin: 0;
+  font-family: "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: 1.55rem;
+  font-weight: 400;
+}
+.history-event-heading time,
+.history-actor {
+  color: #626971;
+  font-size: 0.875rem;
+}
+.history-snapshot {
+  border-left: 0;
+  border-top: 1px solid #d4d0c5;
+  margin-top: 1.5rem;
+  padding: 1.25rem 0 0;
+}
+.history-snapshot h4 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.snapshot-fields > div {
+  display: grid;
+  grid-template-columns: minmax(9rem, 1fr) 2fr;
+  gap: 1rem;
+  padding-block: 0.7rem;
+  border-top: 1px solid #e3dfd5;
+}
+.snapshot-fields dt {
+  color: #626971;
+}
+.snapshot-fields dd {
+  margin: 0;
+}
+.no-previous-state {
+  border-left: 3px solid #d4d0c5;
+  padding-left: 1rem;
+  color: #626971;
+}
+.history-links {
+  justify-content: flex-start;
+  margin-top: 2rem;
+}
 @media (max-width: 420px) {
   header {
     flex-direction: column;
@@ -347,6 +493,15 @@ footer {
     grid-column: auto;
   }
   .contract-field {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+  .register-row-heading,
+  .history-event-heading,
+  .history-heading {
+    flex-direction: column;
+  }
+  .snapshot-fields > div {
     grid-template-columns: 1fr;
     gap: 0.25rem;
   }

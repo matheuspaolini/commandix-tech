@@ -24,6 +24,8 @@ import {
 import { PageShell } from "@/shared/ui";
 import { ContractCreationForm } from "./contract-creation-form";
 import { ContractDetailPage, RouteNotFoundPage } from "./contract-detail";
+import { ContractHistoryPage } from "./contract-history";
+import { ContractRegister } from "./contract-register";
 
 type Identity = {
   user: { id: string; email: string };
@@ -58,8 +60,10 @@ export function Workspace() {
   const authenticationLost = useCallback(() => {
     browserSession.clear();
     setState({ status: "signedOut", signInFailed: false });
-    navigate(signInDestination(location.pathname), { replace: true });
-  }, [location.pathname, navigate]);
+    navigate(signInDestination(`${location.pathname}${location.search}`), {
+      replace: true,
+    });
+  }, [location.pathname, location.search, navigate]);
 
   async function signOut() {
     setState({ status: "signedOut", signInFailed: false });
@@ -90,7 +94,11 @@ export function Workspace() {
           <Route
             path="/"
             element={
-              <WorkspaceHome identity={state.identity} signOut={signOut} />
+              <WorkspaceHome
+                identity={state.identity}
+                signOut={signOut}
+                onAuthenticationLost={authenticationLost}
+              />
             }
           />
           <Route
@@ -99,6 +107,15 @@ export function Workspace() {
               <ContractDetailPage
                 session={browserSession}
                 role={state.identity.role}
+                onAuthenticationLost={authenticationLost}
+              />
+            }
+          />
+          <Route
+            path="/contracts/:contractId/history"
+            element={
+              <ContractHistoryPage
+                session={browserSession}
                 onAuthenticationLost={authenticationLost}
               />
             }
@@ -127,6 +144,10 @@ export function Workspace() {
           element={<Navigate replace to={signInDestination("/")} />}
         />
         <Route path="/contracts/:contractId" element={<ProtectedRedirect />} />
+        <Route
+          path="/contracts/:contractId/history"
+          element={<ProtectedRedirect />}
+        />
         <Route path="*" element={<RouteNotFoundPage />} />
       </Routes>
     </PageShell>
@@ -136,9 +157,11 @@ export function Workspace() {
 function WorkspaceHome({
   identity,
   signOut,
+  onAuthenticationLost,
 }: {
   identity: Identity;
   signOut: () => Promise<void>;
+  onAuthenticationLost: () => void;
 }) {
   return (
     <main>
@@ -148,6 +171,10 @@ function WorkspaceHome({
       <button type="button" onClick={() => void signOut()}>
         Sign out
       </button>
+      <ContractRegister
+        session={browserSession}
+        onAuthenticationLost={onAuthenticationLost}
+      />
       <ContractCreationForm session={browserSession} />
     </main>
   );
@@ -247,13 +274,41 @@ function SignInPage({
 
 function ProtectedRedirect() {
   const location = useLocation();
-  return <Navigate replace to={signInDestination(location.pathname)} />;
+  return (
+    <Navigate
+      replace
+      to={signInDestination(`${location.pathname}${location.search}`)}
+    />
+  );
 }
 
 export function validateReturnTo(value: string | null): string {
-  if (value === "/") return value;
-  const match = /^\/contracts\/([^/?#]+)$/.exec(value ?? "");
-  return match && isUuidV4(match[1]!) ? value! : "/";
+  if (!value?.startsWith("/") || value.startsWith("//") || value.includes("#"))
+    return "/";
+  let destination: URL;
+  try {
+    destination = new URL(value, "http://commandix.local");
+  } catch {
+    return "/";
+  }
+  if (destination.origin !== "http://commandix.local") return "/";
+  if (destination.pathname === "/") {
+    const keys = [...destination.searchParams.keys()];
+    const validRegisterQuery =
+      keys.length === 0 ||
+      (keys.length === 1 &&
+        keys[0] === "after" &&
+        destination.searchParams.getAll("after").length === 1 &&
+        destination.searchParams.get("after") !== "");
+    return validRegisterQuery
+      ? `${destination.pathname}${destination.search}`
+      : "/";
+  }
+  if (destination.search) return "/";
+  const match = /^\/contracts\/([^/]+)(?:\/history)?$/.exec(
+    destination.pathname,
+  );
+  return match && isUuidV4(match[1]!) ? destination.pathname : "/";
 }
 
 function signInDestination(pathname: string): string {

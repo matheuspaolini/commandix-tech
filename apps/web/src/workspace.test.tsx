@@ -142,14 +142,29 @@ test("failed sign-in restores controls and displays generic feedback", async () 
 
 test("accepts only known same-origin return destinations", () => {
   const validContract = "/contracts/8c3272ba-5192-4d55-817d-13f041850945";
+  const validHistory = `${validContract}/history`;
+  const validPage = "/?after=opaque-cursor";
   expect([
     validateReturnTo("/"),
+    validateReturnTo(validPage),
     validateReturnTo(validContract),
+    validateReturnTo(validHistory),
     validateReturnTo("https://example.com"),
     validateReturnTo("//example.com"),
     validateReturnTo("/contracts/not-a-uuid"),
     validateReturnTo("/unknown"),
-  ]).toEqual(["/", validContract, "/", "/", "/", "/"]);
+    validateReturnTo("/?after=one&after=two"),
+  ]).toEqual([
+    "/",
+    validPage,
+    validContract,
+    validHistory,
+    "/",
+    "/",
+    "/",
+    "/",
+    "/",
+  ]);
 });
 
 test("returns an authenticated deep link to its Contract detail", async () => {

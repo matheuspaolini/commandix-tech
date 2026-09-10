@@ -6,6 +6,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Query,
   Req,
   Res,
   UseGuards,
@@ -30,6 +31,9 @@ import {
   ContractStatusConflict,
   TransitionStatus,
 } from "./transition-status";
+import { ListContracts, parseContractRegisterQuery } from "./list-contracts";
+import { InvalidContractPagination } from "./contract-register-cursor";
+import { ReadContractHistory } from "./read-contract-history";
 
 @Controller("contracts")
 @UseGuards(AccessTokenGuard, RolesGuard)
@@ -40,7 +44,46 @@ export class ContractController {
     private readonly readContractDetail: ReadContractDetail,
     private readonly transitionStatus: TransitionStatus,
     private readonly transitionLogger: ContractTransitionLogger,
+    private readonly listContracts: ListContracts,
+    private readonly readContractHistory: ReadContractHistory,
   ) {}
+
+  @Get()
+  @Roles("ADMIN", "MEMBER")
+  async list(
+    @Req() request: AuthenticatedRequest,
+    @Query() query: Record<string, unknown>,
+  ) {
+    try {
+      const pagination = parseContractRegisterQuery(query);
+      return await this.listContracts.execute({
+        tenantId: request.identity!.tenantId,
+        ...pagination,
+      });
+    } catch (error) {
+      if (error instanceof InvalidContractPagination)
+        throw new PublicHttpException(400, { code: "INVALID_PAGINATION" });
+      throw error;
+    }
+  }
+
+  @Get(":id/history")
+  @Roles("ADMIN", "MEMBER")
+  async history(
+    @Req() request: AuthenticatedRequest,
+    @Param("id", new ParseUUIDPipe({ version: "4" })) contractId: string,
+  ) {
+    try {
+      return await this.readContractHistory.execute({
+        tenantId: request.identity!.tenantId,
+        contractId,
+      });
+    } catch (error) {
+      if (error instanceof ContractNotFound)
+        throw new PublicHttpException(404, { code: "CONTRACT_NOT_FOUND" });
+      throw error;
+    }
+  }
 
   @Post(":id/activate")
   @HttpCode(200)

@@ -205,6 +205,36 @@ The response includes status, revision, saved values, and
 return `404 CONTRACT_NOT_FOUND`. The browser supports direct authenticated
 `/contracts/{id}` navigation and returns to that route after sign-in.
 
+Both roles can browse their Tenant's Contract register in deterministic newest-
+first order:
+
+```sh
+curl -i 'http://localhost:8080/api/contracts?limit=20' \
+  -H "authorization: Bearer $token"
+```
+
+The response is `{ items, nextCursor }`. Items contain Contract ID, status,
+revision, and creation time; no total count is exposed. `limit` defaults to 20
+and cannot exceed 100. Pass the opaque `nextCursor` as `after` to read older
+Contracts. Unsupported parameters, malformed cursors, and invalid limits return
+`400 INVALID_PAGINATION`. Every page and cursor query remains scoped to the
+authenticated Tenant.
+
+Contract History is a complete creation-to-current timeline:
+
+```sh
+curl -i http://localhost:8080/api/contracts/CONTRACT_ID/history \
+  -H "authorization: Bearer $token"
+```
+
+Each entry identifies its action, revision, occurrence time, and actor ID/current
+email. Before and after snapshots include status, revision, values, and the exact
+Template-version definition that interprets those values. Creation has a null
+before snapshot. Missing and foreign-Tenant identifiers return the same
+`404 CONTRACT_NOT_FOUND`. The browser exposes the register at `/`, detail at
+`/contracts/{id}`, and History at `/contracts/{id}/history`, including direct
+authenticated navigation.
+
 An Admin activates a current Draft through an expected-revision action:
 
 ```sh
