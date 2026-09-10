@@ -31,6 +31,7 @@ model Tenant {
   templateVersions TemplateVersion[]
   contracts        Contract[]
   contractHistory  ContractHistory[]
+  notificationLogs NotificationLog[]
 
   @@map("tenants")
 }
@@ -94,10 +95,28 @@ model Contract {
   tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Restrict)
   templateVersion   TemplateVersion   @relation(fields: [templateVersionId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
   history           ContractHistory[]
+  notificationLogs NotificationLog[]
 
   @@unique([id, tenantId])
   @@index([tenantId, createdAt])
   @@map("contracts")
+}
+
+model NotificationLog {
+  eventId            String   @id @map("event_id") @db.Uuid
+  eventType          String   @map("event_type")
+  schemaVersion      Int      @map("schema_version")
+  tenantId           String   @map("tenant_id") @db.Uuid
+  contractId         String   @map("contract_id") @db.Uuid
+  activationRevision Int      @map("activation_revision")
+  occurredAt         DateTime @map("occurred_at") @db.Timestamptz(3)
+  correlationId      String   @map("correlation_id") @db.Uuid
+  processedAt        DateTime @default(now()) @map("processed_at") @db.Timestamptz(6)
+  tenant              Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  contract            Contract @relation(fields: [contractId, tenantId], references: [id, tenantId], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([tenantId, contractId])
+  @@map("notification_logs")
 }
 
 model ContractHistory {

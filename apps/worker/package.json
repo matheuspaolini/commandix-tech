@@ -2,18 +2,25 @@
   "name": "@commandix/worker",
   "private": true,
   "dependencies": {
+    "@commandix/database": "workspace:*",
     "@nestjs/common": "catalog:",
     "@nestjs/core": "catalog:",
+    "@nestjs/microservices": "^11.1.0",
+    "amqplib": "^0.10.9",
+    "amqp-connection-manager": "^4.1.15",
     "reflect-metadata": "catalog:",
     "rxjs": "catalog:"
   },
   "scripts": {
     "typecheck": "bun --bun tsc -p tsconfig.json",
     "start": "bun src/main.ts",
-    "dev": "bun --watch src/main.ts"
+    "dev": "bun --watch src/main.ts",
+    "test": "bun test ./test",
+    "replay:contract-activated": "bun src/replay-contract-activated.ts"
   },
   "devDependencies": {
     "typescript": "catalog:",
-    "@types/bun": "catalog:"
+    "@types/bun": "catalog:",
+    "@types/amqplib": "^0.10.7"
   }
 }

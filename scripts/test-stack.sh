@@ -36,6 +36,68 @@ END $$;
 DELETE FROM tenants WHERE slug = 'unrelated-seed-data';
 SQL
 "${compose[@]}" exec -T api bun scripts/assert-health.mjs ok up up
+"${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs
+# A persistent delivery queued without a consumer must survive a broker restart.
+"${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs prepare-database-failure
+"${compose[@]}" stop -t 10 worker
+"${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs publish-only
+"${compose[@]}" restart rabbitmq
+"${compose[@]}" up -d --wait --wait-timeout 180 --no-recreate rabbitmq
+"${compose[@]}" exec -T rabbitmq rabbitmq-diagnostics -q check_running
+"${compose[@]}" start worker
+"${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs verify-replay
+"${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs prepare-database-failure
+"${compose[@]}" exec -T postgres psql -U postgres -d commandix -v ON_ERROR_STOP=1 \
+  -c 'REVOKE INSERT ON notification_logs FROM commandix_runtime'
+"${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs publish-database-failure
+"${compose[@]}" exec -T postgres psql -U postgres -d commandix -v ON_ERROR_STOP=1 \
+  -c 'GRANT INSERT ON notification_logs TO commandix_runtime'
+"${compose[@]}" exec -T api bun apps/worker/src/replay-contract-activated.ts /app/notification-replay-event.json
+"${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs verify-replay
+"${compose[@]}" exec -T api bun apps/worker/src/replay-contract-activated.ts /app/notification-replay-event.json
+"${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs verify-replay
+"${compose[@]}" logs --no-log-prefix worker | bun -e '
+import assert from "node:assert/strict";
+const logs = await Bun.stdin.text();
+assert.match(logs, /"event":"notification_processed"/);
+assert.match(logs, /"event":"notification_processing_failed"/);
+assert.doesNotMatch(logs, /notification-secret-sentinel/);
+'
+# An in-flight delivery whose consumer connection closes must return to the queue.
+"${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs prepare-database-failure
+"${compose[@]}" pause postgres
+"${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs publish-only
+unacknowledged=false
+for _attempt in $(seq 1 40); do
+  if "${compose[@]}" exec -T rabbitmq rabbitmqctl list_queues name messages_unacknowledged --formatter json \
+    | bun -e 'const queues = await Bun.stdin.json(); process.exit(queues.some((queue) => queue.name === "commandix.notifications.contract-activated.v1" && queue.messages_unacknowledged === 1) ? 0 : 1)'; then
+    unacknowledged=true
+    break
+  fi
+  sleep 0.25
+done
+if [[ "$unacknowledged" != true ]]; then
+  printf '%s\n' 'Timed out waiting for an unacknowledged notification delivery' >&2
+  exit 1
+fi
+"${compose[@]}" kill -s SIGKILL worker
+"${compose[@]}" unpause postgres
+postgres_ready=false
+postgres_container=$("${compose[@]}" ps -q postgres)
+for _attempt in $(seq 1 40); do
+  postgres_health=$(docker inspect --format '{{.State.Health.Status}}' "$postgres_container")
+  if [[ "$postgres_health" == healthy ]]; then
+    postgres_ready=true
+    break
+  fi
+  sleep 0.25
+done
+if [[ "$postgres_ready" != true ]]; then
+  printf '%s\n' 'PostgreSQL did not recover after the acknowledgement test' >&2
+  exit 1
+fi
+"${compose[@]}" start worker
+"${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs verify-replay
 web_address=$("${compose[@]}" port web 80)
 bun scripts/assert-health.mjs ok up up "http://$web_address/api/health"
 bun - "$web_address" <<'JS'

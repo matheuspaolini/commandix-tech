@@ -205,6 +205,73 @@ The response includes status, revision, saved values, and
 return `404 CONTRACT_NOT_FOUND`. The browser supports direct authenticated
 `/contracts/{id}` navigation and returns to that route after sign-in.
 
+## Activation notification delivery
+
+The worker consumes the version-one activation event through this durable classic
+RabbitMQ topology:
+
+| Resource                   | Name                                                |
+| -------------------------- | --------------------------------------------------- |
+| Topic exchange             | `commandix.contracts`                               |
+| Routing key / Nest pattern | `contract.activated.v1`                             |
+| Consumer queue             | `commandix.notifications.contract-activated.v1`     |
+| Dead-letter topic exchange | `commandix.notifications.dlx`                       |
+| Dead-letter queue          | `commandix.notifications.contract-activated.v1.dlq` |
+
+Publish persistent JSON messages using Nest's event envelope:
+
+```json
+{
+  "pattern": "contract.activated.v1",
+  "data": {
+    "eventId": "0d087f87-0177-41ce-a705-ffb33d160fb8",
+    "eventType": "contract.activated",
+    "schemaVersion": 1,
+    "tenantId": "a6819601-e52a-4c5c-b875-dae3b7b876d6",
+    "contractId": "97b729df-5520-4be2-8752-fcb09ba6f312",
+    "activationRevision": 2,
+    "occurredAt": "2026-09-10T14:03:22.123Z",
+    "correlationId": "AE68EDCD-E14F-4E0F-8A56-0C61D91B069E"
+  }
+}
+```
+
+The `data` object must contain exactly those eight fields. IDs use UUID form;
+type/version are exactly `contract.activated`/`1`; revision is a positive safe
+integer; and occurrence time is UTC RFC 3339 with exactly three millisecond digits.
+The referenced Contract must belong to the Tenant and its current revision must be
+at least the activation revision. Delayed delivery is accepted after the Contract
+has Closed.
+
+The consumer manually acknowledges only after notification evidence is persisted.
+Delivery is at least once; a globally unique event ID reduces identical sequential
+or concurrent deliveries to one row. Reusing an event ID with different metadata
+is a failure. Invalid events, inconsistent references, identity conflicts, and
+database failures are rejected without requeue and arrive in the DLQ. There is no
+automatic DLQ retry, outbound notification, or production activation publisher in
+this slice.
+
+For local troubleshooting, inspect one DLQ entry without removing it:
+
+```sh
+curl -sS -u commandix:local_broker_password \
+  -H 'content-type: application/json' \
+  http://localhost:15672/api/queues/%2F/commandix.notifications.contract-activated.v1.dlq/get \
+  --data '{"count":1,"ackmode":"ack_requeue_true","encoding":"auto"}'
+```
+
+Copy only its `data` object into `event.json`, correct the external failure, and
+replay the original identity through a publisher-confirmed command:
+
+```sh
+bun run --filter @commandix/worker replay:contract-activated -- ./event.json
+```
+
+Verify `notification_processed` in worker logs (or the notification row) before
+acknowledging/removing the original DLQ entry. Worker logs include only safe event,
+correlation, Tenant, and Contract identifiers; they exclude message bodies,
+Contract values, credentials, and driver errors.
+
 ## Develop and verify
 
 Install Bun 1.4.0 for host commands (Docker Compose and Bash are also needed for
@@ -279,10 +346,9 @@ routes. Compose smoke tests cover actual dependency failures and restoration.
 
 The API owns Auth, Tenant, and Contract modules with framework-independent
 normalization, password, token, onboarding, Template validation, and persistence
-seams. The worker remains idle; no queues or consumers are installed yet. Draft
-creation is the only Contract mutation endpoint in this slice. Future
-activation delivery uses a transactional outbox, one publisher, and idempotent
-notification persistence. Contract screens, immutable history, and tenant
-enforcement for later domain resources arrive in their introducing slices.
+seams. The separate worker owns durable activation-event consumption and
+idempotent notification evidence; a later slice adds the transactional outbox and
+its single publisher. Draft creation is the only Contract mutation endpoint in
+this slice.
 OpenTelemetry is deferred. The Compose setup is intended for local
 development, not deployment with public credentials or exposed production services.
