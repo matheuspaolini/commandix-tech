@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { type SubmitEvent, useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
 
 import {
@@ -19,6 +19,14 @@ import {
   ContractHistoryTimeline,
   useContractHistory,
 } from "./contract-history-view";
+import {
+  ContractValueFields,
+  createContractValueForm,
+  serializeContractValueForm,
+  type ContractValueFormState,
+  type ContractValueInput,
+  type ContractValueIssue,
+} from "./contract-values-form";
 
 export {
   formatCalendarDate,
@@ -40,6 +48,27 @@ type TransitionState =
   | { status: "succeeded"; target: TransitionTarget }
   | { status: "failed"; target: TransitionTarget }
   | { status: "conflict"; target: TransitionTarget; reloadFailed: boolean };
+
+type EditState =
+  | { status: "viewing" }
+  | {
+      status: "editing";
+      form: ContractValueFormState;
+      baseline: ContractValueFormState;
+    }
+  | {
+      status: "submitting";
+      form: ContractValueFormState;
+      baseline: ContractValueFormState;
+    }
+  | {
+      status: "failed";
+      form: ContractValueFormState;
+      baseline: ContractValueFormState;
+      issues: ContractValueIssue[];
+    }
+  | { status: "conflict"; reloadFailed: boolean }
+  | { status: "saved"; outcome: "changed" | "unchanged" };
 
 const TRANSITION_PRESENTATION = {
   ACTIVE: {
@@ -84,6 +113,7 @@ export function ContractDetailPage({
   const [transitionState, setTransitionState] = useState<TransitionState>({
     status: "idle",
   });
+  const [editState, setEditState] = useState<EditState>({ status: "viewing" });
   const history = useContractHistory({
     contractId,
     session,
@@ -92,6 +122,7 @@ export function ContractDetailPage({
 
   useEffect(() => {
     setTransitionState({ status: "idle" });
+    setEditState({ status: "viewing" });
     if (!isUuidV4(contractId)) {
       setState({ status: "notFound" });
       return;
@@ -161,6 +192,114 @@ export function ContractDetailPage({
 
   const contract = state.contract;
   const status = formatContractStatus(contract.status);
+  const editing =
+    editState.status === "editing" ||
+    editState.status === "submitting" ||
+    editState.status === "failed";
+
+  function beginEditing(): void {
+    const form = createContractValueForm(contract.templateVersion.fields, {
+      kind: "persisted",
+      values: contract.values,
+    });
+    setTransitionState({ status: "idle" });
+    setEditState({ status: "editing", form, baseline: form });
+  }
+
+  function updateEditField(
+    key: string,
+    change: Partial<ContractValueInput>,
+  ): void {
+    setEditState((current) => {
+      if (current.status !== "editing" && current.status !== "failed")
+        return current;
+      return {
+        status: "editing",
+        baseline: current.baseline,
+        form: {
+          ...current.form,
+          [key]: { ...current.form[key]!, ...change },
+        },
+      };
+    });
+  }
+
+  function cancelEditing(): void {
+    if (!editing) return;
+    const dirty =
+      JSON.stringify(editState.form) !== JSON.stringify(editState.baseline);
+    if (dirty && !window.confirm("Discard unsaved Draft changes?")) return;
+    setEditState({ status: "viewing" });
+  }
+
+  async function submitEdit(
+    event: SubmitEvent<HTMLFormElement>,
+  ): Promise<void> {
+    event.preventDefault();
+    if (editState.status !== "editing" && editState.status !== "failed") return;
+    const { form, baseline } = editState;
+    const submission = serializeContractValueForm(
+      contract.templateVersion.fields,
+      form,
+    );
+    setEditState({ status: "submitting", form, baseline });
+    try {
+      const updated = await session.requestJson(
+        API_ENDPOINTS.editContractValues(contract.id),
+        {
+          init: {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              expectedRevision: contract.revision,
+              values: submission.values,
+              clearedKeys: submission.excludedOptionalKeys,
+            }),
+          },
+          isValid: isContractDetail,
+        },
+      );
+      setState({ status: "ready", contract: updated });
+      setEditState({
+        status: "saved",
+        outcome:
+          updated.revision === contract.revision ? "unchanged" : "changed",
+      });
+      await history.reload();
+    } catch (error) {
+      if (error instanceof ApiResponseError && error.status === 401) {
+        onAuthenticationLost();
+        return;
+      }
+      if (error instanceof ApiResponseError && error.status === 409) {
+        try {
+          const latest = await session.requestJson(
+            API_ENDPOINTS.contractDetail(contract.id),
+            { isValid: isContractDetail },
+          );
+          setState({ status: "ready", contract: latest });
+          const historyReloaded = await history.reload();
+          setEditState({ status: "conflict", reloadFailed: !historyReloaded });
+        } catch (reloadError) {
+          if (
+            reloadError instanceof ApiResponseError &&
+            reloadError.status === 401
+          ) {
+            onAuthenticationLost();
+            return;
+          }
+          setEditState({ status: "conflict", reloadFailed: true });
+        }
+        return;
+      }
+      setEditState({
+        status: "failed",
+        form,
+        baseline,
+        issues: contractValueIssues(error),
+      });
+    }
+  }
 
   async function reloadAfterConflict(target: TransitionTarget): Promise<void> {
     try {
@@ -245,17 +384,83 @@ export function ContractDetailPage({
           aria-labelledby="contract-fields-heading"
         >
           <h2 id="contract-fields-heading">Contract details</h2>
-          <dl>
-            {contract.templateVersion.fields.map((field) => (
-              <div className="contract-field" key={field.key}>
-                <dt>{field.label}</dt>
-                <dd>
-                  {formatContractValue({ field, values: contract.values })}
-                </dd>
+          {editing ? (
+            <form onSubmit={submitEdit} noValidate>
+              <ContractValueFields
+                fields={contract.templateVersion.fields}
+                form={editState.form}
+                issues={editState.status === "failed" ? editState.issues : []}
+                disabled={editState.status === "submitting"}
+                idPrefix="edit-contract"
+                onChange={updateEditField}
+              />
+              <div className="contract-actions">
+                <button
+                  type="submit"
+                  disabled={editState.status === "submitting"}
+                >
+                  {editState.status === "submitting"
+                    ? "Saving Draft…"
+                    : "Save Draft"}
+                </button>
+                <button
+                  type="button"
+                  disabled={editState.status === "submitting"}
+                  onClick={cancelEditing}
+                >
+                  Cancel
+                </button>
               </div>
-            ))}
-          </dl>
+            </form>
+          ) : (
+            <dl>
+              {contract.templateVersion.fields.map((field) => (
+                <div className="contract-field" key={field.key}>
+                  <dt>{field.label}</dt>
+                  <dd>
+                    {formatContractValue({ field, values: contract.values })}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          )}
         </section>
+        {editState.status === "saved" ? (
+          <p role="status" className="form-success">
+            {editState.outcome === "changed"
+              ? "Draft updated."
+              : "No changes to save."}
+          </p>
+        ) : null}
+        {editState.status === "failed" && editState.issues.length === 0 ? (
+          <p role="alert" className="form-error">
+            The Draft could not be saved. Try again.
+          </p>
+        ) : null}
+        {editState.status === "failed" &&
+        editState.issues.some(
+          (issue) => !issue.key || issue.code === "UNKNOWN_FIELD",
+        ) ? (
+          <p role="alert" className="form-error">
+            The submitted Draft contains unsupported values.
+          </p>
+        ) : null}
+        {editState.status === "conflict" ? (
+          <div role="alert" className="form-error">
+            <p>
+              This contract changed. Review the latest version before editing
+              again.
+            </p>
+            {editState.reloadFailed ? (
+              <button
+                type="button"
+                onClick={() => setRetry((value) => value + 1)}
+              >
+                Reload contract
+              </button>
+            ) : null}
+          </div>
+        ) : null}
         {transitionState.status === "succeeded" ? (
           <p role="status" className="form-success">
             {TRANSITION_PRESENTATION[transitionState.target].success}
@@ -282,7 +487,15 @@ export function ContractDetailPage({
             ) : null}
           </div>
         ) : null}
+        {role === "ADMIN" && contract.status === "DRAFT" && !editing ? (
+          <section className="contract-actions" aria-label="Draft editing">
+            <button type="button" onClick={beginEditing}>
+              Edit Draft
+            </button>
+          </section>
+        ) : null}
         {eligibleTransition(role, contract.status) &&
+        !editing &&
         transitionState.status !== "succeeded" &&
         !(
           transitionState.status === "conflict" && transitionState.reloadFailed
@@ -355,6 +568,25 @@ export function ContractDetailPage({
       </article>
     </main>
   );
+}
+
+function contractValueIssues(error: unknown): ContractValueIssue[] {
+  if (!(error instanceof ApiResponseError) || !isRecord(error.body)) return [];
+  if (
+    error.body.code !== "INVALID_CONTRACT_VALUES" ||
+    !Array.isArray(error.body.issues)
+  )
+    return [];
+  return error.body.issues.filter(
+    (issue): issue is ContractValueIssue =>
+      isRecord(issue) &&
+      typeof issue.code === "string" &&
+      (issue.key === undefined || typeof issue.key === "string"),
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function eligibleTransition(

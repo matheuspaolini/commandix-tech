@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  contractValuesEqual,
   type ContractValueIssue,
   InvalidContractValues,
+  resolveDraftEditValues,
   resolveContractValues,
 } from "../src/contract/contract-values";
 import type { TemplateDefinition } from "../src/contract/template-definition";
@@ -155,4 +157,67 @@ describe("invalid contract values", () => {
   ];
   for (const [name, values, expected] of cases)
     test(name, () => expect(issuesFor(values)).toStrictEqual(expected));
+});
+
+test("resolves complete Draft edits with defaults and explicit clearing", () => {
+  expect(
+    resolveDraftEditValues({
+      definition: {
+        fields: [
+          {
+            key: "amount",
+            label: "Amount",
+            type: "number",
+            required: false,
+            default: 100,
+          },
+          {
+            key: "notes",
+            label: "Notes",
+            type: "text",
+            required: false,
+          },
+        ],
+      },
+      supplied: {},
+      clearedKeys: ["amount"],
+    }),
+  ).toStrictEqual({});
+});
+
+test("rejects ambiguous, duplicate, required, and unknown Draft clears deterministically", () => {
+  const editDefinition: TemplateDefinition = {
+    fields: [
+      { key: "title", label: "Title", type: "text", required: true },
+      { key: "notes", label: "Notes", type: "text", required: false },
+    ],
+  };
+  let issues: ContractValueIssue[] = [];
+  try {
+    resolveDraftEditValues({
+      definition: editDefinition,
+      supplied: { notes: "kept" },
+      clearedKeys: ["title", "notes", "notes", "missing"],
+    });
+  } catch (error) {
+    if (!(error instanceof InvalidContractValues)) throw error;
+    issues = error.issues;
+  }
+
+  expect(issues).toStrictEqual([
+    { key: "title", code: "REQUIRED" },
+    { key: "notes", code: "DUPLICATE_FIELD" },
+    { key: "notes", code: "AMBIGUOUS_FIELD" },
+    { key: "missing", code: "UNKNOWN_FIELD" },
+  ]);
+});
+
+test("compares canonical Contract values independently of property order", () => {
+  expect({
+    reordered: contractValuesEqual(
+      { amount: 0, approved: false },
+      { approved: false, amount: -0 },
+    ),
+    missing: contractValuesEqual({ notes: "" }, {}),
+  }).toStrictEqual({ reordered: true, missing: false });
 });

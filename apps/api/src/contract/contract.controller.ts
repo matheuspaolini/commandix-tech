@@ -6,6 +6,7 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
+  Put,
   Query,
   Req,
   Res,
@@ -35,6 +36,8 @@ import {
 import { ListContracts, parseContractRegisterQuery } from "./list-contracts";
 import { InvalidContractPagination } from "./contract-register-cursor";
 import { ReadContractHistory } from "./read-contract-history";
+import { EditDraftValuesDto } from "./edit-draft-values.dto";
+import { EditDraftValues } from "./edit-draft-values";
 
 @Controller("contracts")
 @UseGuards(AccessTokenGuard, RolesGuard)
@@ -47,6 +50,7 @@ export class ContractController {
     private readonly transitionLogger: ContractTransitionLogger,
     private readonly listContracts: ListContracts,
     private readonly readContractHistory: ReadContractHistory,
+    private readonly editDraftValues: EditDraftValues,
   ) {}
 
   @Get()
@@ -65,6 +69,62 @@ export class ContractController {
       if (error instanceof InvalidContractPagination)
         throw new PublicHttpException(400, { code: "INVALID_PAGINATION" });
       throw error;
+    }
+  }
+
+  @Put(":id/values")
+  @Roles("ADMIN")
+  async editValues(
+    @Req() request: AuthenticatedRequest,
+    @Param("id", new ParseUUIDPipe({ version: "4" })) contractId: string,
+    @Body() body: EditDraftValuesDto,
+  ) {
+    const identity = request.identity!;
+    try {
+      const contract = await this.editDraftValues.execute({
+        tenantId: identity.tenantId,
+        actorId: identity.sub,
+        contractId,
+        expectedRevision: body.expectedRevision,
+        suppliedValues: body.values,
+        clearedKeys: body.clearedKeys ?? [],
+      });
+      const fields = {
+        tenantId: identity.tenantId,
+        actorId: identity.sub,
+        contractId,
+        revision: contract.revision,
+      };
+      if (contract.revision === body.expectedRevision)
+        this.transitionLogger.unchanged(fields);
+      else this.transitionLogger.edited(fields);
+      return contract;
+    } catch (error) {
+      if (error instanceof InvalidContractValues) {
+        this.transitionLogger.editRejected({
+          tenantId: identity.tenantId,
+          actorId: identity.sub,
+          contractId,
+          expectedRevision: body.expectedRevision,
+          reason: "INVALID_CONTRACT_VALUES",
+        });
+        throw new PublicHttpException(400, {
+          code: "INVALID_CONTRACT_VALUES",
+          issues: error.issues,
+        });
+      }
+      const code = transitionErrorCode(error);
+      if (!code) throw error;
+      this.transitionLogger.editRejected({
+        tenantId: identity.tenantId,
+        actorId: identity.sub,
+        contractId,
+        expectedRevision: body.expectedRevision,
+        reason: code,
+      });
+      throw new PublicHttpException(code === "CONTRACT_NOT_FOUND" ? 404 : 409, {
+        code,
+      });
     }
   }
 

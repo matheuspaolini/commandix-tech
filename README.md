@@ -250,6 +250,24 @@ Contract is not Draft, the response is `409 CONTRACT_STATUS_CONFLICT`. Revision
 is checked first. Members receive `403`, and missing or foreign-Tenant Contracts
 receive the same `404 CONTRACT_NOT_FOUND` response.
 
+An Admin replaces a Draft's values against its saved Template version:
+
+```sh
+curl -i -X PUT http://localhost:8080/api/contracts/CONTRACT_ID/values \
+  -H "authorization: Bearer $token" \
+  -H 'content-type: application/json' \
+  --data '{"expectedRevision":1,"values":{"title":"Renewed agreement","effective-date":"2028-02-29"},"clearedKeys":["notes"]}'
+```
+
+Omitted fields receive defaults from that saved version; optional keys listed in
+`clearedKeys` remain absent even when they define defaults. Clear keys must be
+unique, known, optional, and absent from `values`. A changed replacement advances
+the revision and adds one `EDITED` History entry atomically. A valid unchanged
+replacement returns the current detail without changing History or Outbox state.
+Stale revisions and non-Draft states return the same `409` conflicts described
+above. The browser reloads current state after a conflict and never resubmits stale
+values automatically.
+
 Activation, its `ACTIVATED` History entry, and its stable-identity Outbox event
 commit in one PostgreSQL transaction. HTTP never contacts RabbitMQ: success means
 the transaction committed, not that notification processing has finished. The

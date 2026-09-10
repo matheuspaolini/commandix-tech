@@ -19,6 +19,18 @@ export class ContractTransitionLogger {
     this.write({ event: "contract.closure_rejected", ...fields });
   }
 
+  edited(fields: Record<string, unknown>): void {
+    this.write({ event: "contract.edited", ...fields });
+  }
+
+  unchanged(fields: Record<string, unknown>): void {
+    this.write({ event: "contract.edit_unchanged", ...fields });
+  }
+
+  editRejected(fields: Record<string, unknown>): void {
+    this.write({ event: "contract.edit_rejected", ...fields });
+  }
+
   private write(fields: Record<string, unknown>): void {
     console.log(
       JSON.stringify({

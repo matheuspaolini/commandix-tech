@@ -10,7 +10,9 @@ export type ContractValueIssueCode =
   | "INVALID_TYPE"
   | "INVALID_TEXT"
   | "INVALID_DATE"
-  | "INVALID_ENUM";
+  | "INVALID_ENUM"
+  | "DUPLICATE_FIELD"
+  | "AMBIGUOUS_FIELD";
 export type ContractValueIssue = { key?: string; code: ContractValueIssueCode };
 
 export class InvalidContractValues extends Error {
@@ -41,6 +43,72 @@ export function resolveContractValues(
   definition: TemplateDefinition,
   supplied: unknown,
 ): ContractValues {
+  return resolveValues(definition, supplied, new Set());
+}
+
+export function resolveDraftEditValues(input: {
+  definition: TemplateDefinition;
+  supplied: unknown;
+  clearedKeys: readonly string[];
+}): ContractValues {
+  if (!isRecord(input.supplied))
+    throw new InvalidContractValues([{ code: "INVALID_TYPE" }]);
+
+  const knownFields = new Map(
+    input.definition.fields.map((field) => [field.key, field]),
+  );
+  const clearCounts = new Map<string, number>();
+  for (const key of input.clearedKeys)
+    clearCounts.set(key, (clearCounts.get(key) ?? 0) + 1);
+
+  const issues: ContractValueIssue[] = [];
+  for (const field of input.definition.fields) {
+    const count = clearCounts.get(field.key) ?? 0;
+    if (count === 0) continue;
+    if (field.required) issues.push({ key: field.key, code: "REQUIRED" });
+    if (count > 1) issues.push({ key: field.key, code: "DUPLICATE_FIELD" });
+    if (Object.hasOwn(input.supplied, field.key))
+      issues.push({ key: field.key, code: "AMBIGUOUS_FIELD" });
+  }
+
+  [...clearCounts.keys()]
+    .filter((key) => !knownFields.has(key))
+    .sort()
+    .forEach((key) => {
+      if (clearCounts.get(key)! > 1)
+        issues.push({ key, code: "DUPLICATE_FIELD" });
+      issues.push({ key, code: "UNKNOWN_FIELD" });
+    });
+
+  if (issues.length > 0) throw new InvalidContractValues(issues);
+  return resolveValues(
+    input.definition,
+    input.supplied,
+    new Set(input.clearedKeys),
+  );
+}
+
+export function contractValuesEqual(
+  left: ContractValues,
+  right: ContractValues,
+): boolean {
+  const leftKeys = Object.keys(left).sort();
+  const rightKeys = Object.keys(right).sort();
+  return (
+    leftKeys.length === rightKeys.length &&
+    leftKeys.every(
+      (key, index) =>
+        key === rightKeys[index] &&
+        Object.is(canonicalNumber(left[key]!), canonicalNumber(right[key]!)),
+    )
+  );
+}
+
+function resolveValues(
+  definition: TemplateDefinition,
+  supplied: unknown,
+  clearedKeys: ReadonlySet<string>,
+): ContractValues {
   if (!isRecord(supplied))
     throw new InvalidContractValues([{ code: "INVALID_TYPE" }]);
 
@@ -49,6 +117,7 @@ export function resolveContractValues(
   const knownKeys = new Set(definition.fields.map((field) => field.key));
 
   for (const field of definition.fields) {
+    if (clearedKeys.has(field.key)) continue;
     if (!Object.hasOwn(supplied, field.key)) {
       if (Object.hasOwn(field, "default"))
         values[field.key] = canonicalNumber(field.default!);

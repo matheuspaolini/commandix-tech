@@ -3,6 +3,10 @@ import { createPrismaClient, PrismaClient } from "@commandix/database";
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { createApp } from "../src/app";
+import {
+  CONTRACT_MUTATION_TRANSACTIONS,
+  type ContractMutationTransactions,
+} from "../src/contract/contract-mutation";
 
 Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
 Bun.env.AUTH_ALLOWED_ORIGINS ??= "http://localhost:8080";
@@ -59,6 +63,22 @@ function close(token: string, contractId: string, expectedRevision: unknown) {
     .post(`/contracts/${contractId}/close`)
     .set("Authorization", `Bearer ${token}`)
     .send({ expectedRevision });
+}
+function edit(
+  token: string,
+  contractId: string,
+  expectedRevision: unknown,
+  values: unknown,
+  clearedKeys?: unknown,
+) {
+  return request(app.getHttpServer())
+    .put(`/contracts/${contractId}/values`)
+    .set("Authorization", `Bearer ${token}`)
+    .send({
+      expectedRevision,
+      values,
+      ...(clearedKeys === undefined ? {} : { clearedKeys }),
+    });
 }
 async function removeTemplateVersionFixture(versionId: string) {
   if (!cleanupClient) throw new Error("Missing TEST_DATABASE_URL");
@@ -384,6 +404,269 @@ describe("GET /contracts/:id", () => {
       });
       await removeTemplateVersionFixture(replacementVersionId);
     }
+  });
+});
+
+describe("PUT /contracts/:id/values", () => {
+  test("edits Draft values atomically and keeps valid no-ops unchanged", async () => {
+    const created = await create(tokens.get("acme:admin")!, {
+      title: "Editable contract",
+      "effective-date": "2028-01-01",
+    });
+    const changed = await edit(
+      tokens.get("acme:admin")!,
+      created.body.id,
+      1,
+      { title: "Edited contract", "effective-date": "2028-02-29" },
+      ["amount"],
+    );
+    const unchanged = await edit(
+      tokens.get("acme:admin")!,
+      created.body.id,
+      2,
+      { title: "Edited contract", "effective-date": "2028-02-29" },
+      ["amount"],
+    );
+    const stale = await edit(
+      tokens.get("acme:admin")!,
+      created.body.id,
+      1,
+      { title: "Edited contract", "effective-date": "2028-02-29" },
+      ["amount"],
+    );
+    const persisted = await client.contract.findUniqueOrThrow({
+      where: { id: created.body.id },
+      include: {
+        history: { orderBy: { revision: "asc" } },
+        activationOutbox: true,
+      },
+    });
+
+    expect({
+      responses: [changed, unchanged, stale].map(({ status, body }) => ({
+        status,
+        revision: body.revision,
+        code: body.code,
+      })),
+      persisted: {
+        revision: persisted.revision,
+        values: persisted.values,
+        actions: persisted.history.map(({ action }) => action),
+        edited: persisted.history[1],
+        outbox: persisted.activationOutbox.length,
+      },
+    }).toStrictEqual({
+      responses: [
+        { status: 200, revision: 2, code: undefined },
+        { status: 200, revision: 2, code: undefined },
+        {
+          status: 409,
+          revision: undefined,
+          code: "CONTRACT_REVISION_CONFLICT",
+        },
+      ],
+      persisted: {
+        revision: 2,
+        values: {
+          title: "Edited contract",
+          "effective-date": "2028-02-29",
+          approved: false,
+          category: "standard",
+        },
+        actions: ["CREATED", "EDITED"],
+        edited: expect.objectContaining({
+          revision: 2,
+          beforeSnapshot: expect.objectContaining({ revision: 1 }),
+          afterSnapshot: expect.objectContaining({
+            revision: 2,
+            values: expect.objectContaining({ title: "Edited contract" }),
+          }),
+        }),
+        outbox: 0,
+      },
+    });
+  });
+
+  test("enforces role, Tenant, lifecycle, clear validation, and concurrent revision checks", async () => {
+    const own = await create(tokens.get("acme:admin")!, {
+      title: "Concurrent edits",
+      "effective-date": "2028-01-01",
+    });
+    const foreign = await create(tokens.get("globex:admin")!, {
+      title: "Foreign edit",
+      "effective-date": "2028-01-01",
+    });
+    const member = await edit(tokens.get("acme:member")!, own.body.id, 1, {});
+    const hidden = await edit(
+      tokens.get("acme:admin")!,
+      foreign.body.id,
+      1,
+      {},
+    );
+    const invalid = await edit(
+      tokens.get("acme:admin")!,
+      own.body.id,
+      1,
+      { title: "Ambiguous" },
+      ["title", "title"],
+    );
+    const concurrent = await Promise.all([
+      edit(tokens.get("acme:admin")!, own.body.id, 1, {
+        title: "First",
+        "effective-date": "2028-01-01",
+      }),
+      edit(tokens.get("acme:admin")!, own.body.id, 1, {
+        title: "Second",
+        "effective-date": "2028-01-01",
+      }),
+    ]);
+    const winner = concurrent.find(({ status }) => status === 200)!;
+    await activate(
+      tokens.get("acme:admin")!,
+      own.body.id,
+      winner.body.revision,
+    );
+    const active = await edit(
+      tokens.get("acme:admin")!,
+      own.body.id,
+      winner.body.revision + 1,
+      winner.body.values,
+    );
+    const persisted = await client.contract.findUniqueOrThrow({
+      where: { id: own.body.id },
+      include: { history: true, activationOutbox: true },
+    });
+    const racing = await create(tokens.get("acme:admin")!, {
+      title: "Edit activation race",
+      "effective-date": "2028-01-01",
+    });
+    const raceResponses = await Promise.all([
+      edit(tokens.get("acme:admin")!, racing.body.id, 1, {
+        title: "Edited before activation",
+        "effective-date": "2028-01-01",
+      }),
+      activate(tokens.get("acme:admin")!, racing.body.id, 1),
+    ]);
+    const racePersisted = await client.contract.findUniqueOrThrow({
+      where: { id: racing.body.id },
+      include: { history: true, activationOutbox: true },
+    });
+
+    expect({
+      member: member.status,
+      hidden: [hidden.status, hidden.body.code],
+      invalid: [invalid.status, invalid.body.code, invalid.body.issues],
+      concurrent: concurrent.map(({ status }) => status).sort(),
+      active: [active.status, active.body.code],
+      persisted: {
+        revision: persisted.revision,
+        history: persisted.history.length,
+        outbox: persisted.activationOutbox.length,
+      },
+      race: {
+        statuses: raceResponses.map(({ status }) => status).sort(),
+        revision: racePersisted.revision,
+        history: racePersisted.history.length,
+        coherent:
+          (racePersisted.status === "ACTIVE" &&
+            racePersisted.activationOutbox.length === 1 &&
+            (racePersisted.values as { title: string }).title ===
+              "Edit activation race") ||
+          (racePersisted.status === "DRAFT" &&
+            racePersisted.activationOutbox.length === 0 &&
+            (racePersisted.values as { title: string }).title ===
+              "Edited before activation"),
+      },
+    }).toStrictEqual({
+      member: 403,
+      hidden: [404, "CONTRACT_NOT_FOUND"],
+      invalid: [
+        400,
+        "INVALID_CONTRACT_VALUES",
+        [
+          { key: "title", code: "REQUIRED" },
+          { key: "title", code: "DUPLICATE_FIELD" },
+          { key: "title", code: "AMBIGUOUS_FIELD" },
+        ],
+      ],
+      concurrent: [200, 409],
+      active: [409, "CONTRACT_STATUS_CONFLICT"],
+      persisted: { revision: 3, history: 3, outbox: 1 },
+      race: { statuses: [200, 409], revision: 2, history: 2, coherent: true },
+    });
+  });
+
+  test("rolls back a Draft edit when its History insert fails", async () => {
+    const created = await create(tokens.get("acme:admin")!, {
+      title: "Rollback edit",
+      "effective-date": "2028-01-01",
+    });
+    const before = await client.contract.findUniqueOrThrow({
+      where: { id: created.body.id },
+      include: { history: true },
+    });
+    const actor = await client.user.findFirstOrThrow({
+      where: { tenantId: before.tenantId, role: "ADMIN" },
+    });
+    const transactions = app.get<ContractMutationTransactions>(
+      CONTRACT_MUTATION_TRANSACTIONS,
+    );
+    const failure = await transactions
+      .run(async (transaction) => {
+        const locked = await transaction.findForUpdate({
+          tenantId: before.tenantId,
+          contractId: before.id,
+        });
+        if (!locked) throw new Error("Missing rollback fixture");
+        const beforeSnapshot = {
+          status: locked.status,
+          revision: locked.revision,
+          values: locked.values,
+          templateVersionId: locked.templateVersion.id,
+        };
+        await transaction.persistDraftEdit({
+          contract: {
+            id: locked.id,
+            tenantId: locked.tenantId,
+            revision: 2,
+            values: { ...locked.values, title: "Must roll back" },
+          },
+          history: {
+            id: before.history[0]!.id,
+            tenantId: locked.tenantId,
+            contractId: locked.id,
+            actorId: actor.id,
+            action: "EDITED",
+            revision: 2,
+            occurredAt: new Date(),
+            before: beforeSnapshot,
+            after: {
+              ...beforeSnapshot,
+              revision: 2,
+              values: { ...locked.values, title: "Must roll back" },
+            },
+          },
+        });
+      })
+      .catch((error: unknown) => error);
+    const after = await client.contract.findUniqueOrThrow({
+      where: { id: created.body.id },
+      include: { history: true, activationOutbox: true },
+    });
+
+    expect({
+      failed: failure instanceof Error,
+      revision: after.revision,
+      values: after.values,
+      history: after.history.length,
+      outbox: after.activationOutbox.length,
+    }).toStrictEqual({
+      failed: true,
+      revision: 1,
+      values: before.values,
+      history: 1,
+      outbox: 0,
+    });
   });
 });
 

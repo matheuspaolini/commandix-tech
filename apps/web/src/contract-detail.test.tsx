@@ -7,7 +7,7 @@ import {
   type ContractDetail,
   type ContractHistory,
 } from "@/shared/api";
-import { render } from "@/shared/test";
+import { render, setInputValue, submitForm } from "@/shared/test";
 import {
   ContractDetailPage,
   formatCalendarDate,
@@ -273,7 +273,7 @@ test("confirms activation and renders the committed Contract", async () => {
   });
 });
 
-test("never offers activation to a Member", async () => {
+test("never offers Draft mutations to a Member", async () => {
   await render(
     <MemoryRouter initialEntries={[`/contracts/${CONTRACT_ID}`]}>
       <Routes>
@@ -294,7 +294,182 @@ test("never offers activation to a Member", async () => {
   );
   await settle();
 
-  expect(document.body.textContent).not.toContain("Activate contract");
+  expect({
+    activation: document.body.textContent?.includes("Activate contract"),
+    editing: document.body.textContent?.includes("Edit Draft"),
+  }).toStrictEqual({ activation: false, editing: false });
+});
+
+test("edits a Draft with typed complete-replacement values and explicit clears", async () => {
+  const requests: Array<{ url: string; method?: string; body?: string }> = [];
+  const valuesWithoutNotes = Object.fromEntries(
+    Object.entries(contract.values).filter(([key]) => key !== "notes"),
+  );
+  const session = {
+    requestJson: async (url: string, options: { init?: RequestInit }) => {
+      requests.push({
+        url,
+        method: options.init?.method,
+        body: options.init?.body as string | undefined,
+      });
+      return options.init?.method === "PUT"
+        ? { ...contract, revision: 2, values: valuesWithoutNotes }
+        : contract;
+    },
+  } as ContractDetailSession;
+  await renderDetail(session, CONTRACT_ID, "ADMIN");
+  await settle();
+  const edit = Array.from(document.querySelectorAll("button")).find(
+    (button) => button.textContent === "Edit Draft",
+  )!;
+  await act(async () => edit.click());
+  const includeNotes = Array.from(
+    document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+  ).find((input) =>
+    input.parentElement?.textContent?.includes("Include Notes"),
+  )!;
+  await act(async () => includeNotes.click());
+  await submitForm();
+  await settle();
+
+  expect({ requests, content: document.body.textContent }).toStrictEqual({
+    requests: [
+      {
+        url: `/api/contracts/${CONTRACT_ID}`,
+        method: undefined,
+        body: undefined,
+      },
+      {
+        url: `/api/contracts/${CONTRACT_ID}/values`,
+        method: "PUT",
+        body: JSON.stringify({
+          expectedRevision: 1,
+          values: valuesWithoutNotes,
+          clearedKeys: ["notes", "reference"],
+        }),
+      },
+    ],
+    content: expect.stringContaining("Draft updated."),
+  });
+});
+
+test("reports an unchanged Draft save without advancing its revision", async () => {
+  const requests: Array<{ method?: string; body?: string }> = [];
+  const session = {
+    requestJson: async (_url: string, options: { init?: RequestInit }) => {
+      requests.push({
+        method: options.init?.method,
+        body: options.init?.body as string | undefined,
+      });
+      return contract;
+    },
+  } as ContractDetailSession;
+  await renderDetail(session, CONTRACT_ID, "ADMIN");
+  await settle();
+  const edit = Array.from(document.querySelectorAll("button")).find(
+    (button) => button.textContent === "Edit Draft",
+  )!;
+  await act(async () => edit.click());
+  await submitForm();
+  await settle();
+
+  expect({
+    request: requests[1],
+    content: document.body.textContent,
+  }).toStrictEqual({
+    request: {
+      method: "PUT",
+      body: JSON.stringify({
+        expectedRevision: 1,
+        values: contract.values,
+        clearedKeys: ["reference"],
+      }),
+    },
+    content: expect.stringContaining("No changes to save."),
+  });
+});
+
+test("requires confirmation before discarding a dirty Draft form", async () => {
+  const confirmations: string[] = [];
+  const originalConfirm = window.confirm;
+  window.confirm = (message?: string) => {
+    confirmations.push(message ?? "");
+    return confirmations.length > 1;
+  };
+  try {
+    await renderDetail(
+      { requestJson: async () => contract } as ContractDetailSession,
+      CONTRACT_ID,
+      "ADMIN",
+    );
+    await settle();
+    const edit = Array.from(document.querySelectorAll("button")).find(
+      (button) => button.textContent === "Edit Draft",
+    )!;
+    await act(async () => edit.click());
+    const includeNotes = Array.from(
+      document.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'),
+    ).find((input) =>
+      input.parentElement?.textContent?.includes("Include Notes"),
+    )!;
+    await act(async () => includeNotes.click());
+    const cancel = Array.from(document.querySelectorAll("button")).find(
+      (button) => button.textContent === "Cancel",
+    )!;
+    await act(async () => cancel.click());
+    const retained = document.getElementById("edit-contract-title") !== null;
+    await act(async () => cancel.click());
+
+    expect({
+      confirmations,
+      retained,
+      discarded: document.getElementById("edit-contract-title"),
+    }).toStrictEqual({
+      confirmations: [
+        "Discard unsaved Draft changes?",
+        "Discard unsaved Draft changes?",
+      ],
+      retained: true,
+      discarded: null,
+    });
+  } finally {
+    window.confirm = originalConfirm;
+  }
+});
+
+test("reloads an edit conflict and discards the stale form", async () => {
+  let detailReads = 0;
+  const latest = {
+    ...contract,
+    revision: 2,
+    values: { ...contract.values, title: "Concurrent" },
+  };
+  const session = {
+    requestJson: async (_url: string, options: { init?: RequestInit }) => {
+      if (options.init?.method === "PUT") throw new ApiResponseError(409);
+      detailReads += 1;
+      return detailReads === 1 ? contract : latest;
+    },
+  } as ContractDetailSession;
+  await renderDetail(session, CONTRACT_ID, "ADMIN");
+  await settle();
+  const edit = Array.from(document.querySelectorAll("button")).find(
+    (button) => button.textContent === "Edit Draft",
+  )!;
+  await act(async () => edit.click());
+  await act(async () => setInputValue("edit-contract-title", "Stale"));
+  await submitForm();
+  await settle();
+
+  expect({
+    content: document.body.textContent,
+    staleInput: document.getElementById("edit-contract-title"),
+  }).toStrictEqual({
+    content: expect.stringContaining(
+      "Review the latest version before editing again.",
+    ),
+    staleInput: null,
+  });
 });
 
 test("reloads a conflicting activation without resubmitting", async () => {

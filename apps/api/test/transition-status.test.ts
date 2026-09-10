@@ -1,10 +1,10 @@
 import { expect, test } from "bun:test";
+import type { ContractMutationTransaction } from "../src/contract/contract-mutation";
 import {
   ContractLifecycle,
   ContractRevisionConflict,
   ContractStatusConflict,
   TransitionStatus,
-  type ContractTransitionTransaction,
 } from "../src/contract/transition-status";
 
 const DRAFT = {
@@ -21,12 +21,13 @@ const DRAFT = {
 
 test("activates a current Draft with one History entry and Outbox event", async () => {
   let persisted: unknown;
-  const transaction: ContractTransitionTransaction = {
+  const transaction: ContractMutationTransaction = {
     findForUpdate: async () => DRAFT,
     persistActivation: async (input) => {
       persisted = input;
     },
     persistClosure: async () => {},
+    persistDraftEdit: async () => {},
   };
   const ids = ["history-id", "event-id"];
   const useCase = new TransitionStatus(
@@ -100,10 +101,11 @@ test("activates a current Draft with one History entry and Outbox event", async 
 });
 
 test("reports a stale revision before an invalid lifecycle", async () => {
-  const transaction: ContractTransitionTransaction = {
+  const transaction: ContractMutationTransaction = {
     findForUpdate: async () => ({ ...DRAFT, status: "ACTIVE", revision: 2 }),
     persistActivation: async () => {},
     persistClosure: async () => {},
+    persistDraftEdit: async () => {},
   };
   const useCase = new TransitionStatus({
     run: (operation) => operation(transaction),
@@ -128,7 +130,7 @@ test("reports a stale revision before an invalid lifecycle", async () => {
 
 test("rejects a current non-Draft lifecycle without persistence", async () => {
   let persisted = false;
-  const transaction: ContractTransitionTransaction = {
+  const transaction: ContractMutationTransaction = {
     findForUpdate: async () => ({ ...DRAFT, status: "ACTIVE", revision: 2 }),
     persistActivation: async () => {
       persisted = true;
@@ -136,6 +138,7 @@ test("rejects a current non-Draft lifecycle without persistence", async () => {
     persistClosure: async () => {
       persisted = true;
     },
+    persistDraftEdit: async () => {},
   };
   const useCase = new TransitionStatus({
     run: (operation) => operation(transaction),
@@ -161,12 +164,13 @@ test("rejects a current non-Draft lifecycle without persistence", async () => {
 test("closes a current Active with one History entry and no Outbox event", async () => {
   let persisted: unknown;
   let generatedIds = 0;
-  const transaction: ContractTransitionTransaction = {
+  const transaction: ContractMutationTransaction = {
     findForUpdate: async () => ({ ...DRAFT, status: "ACTIVE", revision: 2 }),
     persistActivation: async () => {},
     persistClosure: async (input) => {
       persisted = input;
     },
+    persistDraftEdit: async () => {},
   };
   const useCase = new TransitionStatus(
     { run: (operation) => operation(transaction) },

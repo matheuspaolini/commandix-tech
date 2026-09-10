@@ -19,11 +19,10 @@ import {
   ReadContractDetail,
 } from "./read-contract-detail";
 import { ContractTransitionLogger } from "./contract-transition.logger";
-import { PrismaContractTransitionTransactions } from "./prisma-contract-transition";
-import {
-  CONTRACT_TRANSITION_TRANSACTIONS,
-  TransitionStatus,
-} from "./transition-status";
+import { PrismaContractMutationTransactions } from "./prisma-contract-transition";
+import { TransitionStatus } from "./transition-status";
+import { CONTRACT_MUTATION_TRANSACTIONS } from "./contract-mutation";
+import { EditDraftValues } from "./edit-draft-values";
 import { PrismaContractRegisterRepository } from "./prisma-contract-register.repository";
 import { CONTRACT_REGISTER_REPOSITORY, ListContracts } from "./list-contracts";
 import { PrismaContractHistoryRepository } from "./prisma-contract-history.repository";
@@ -39,19 +38,24 @@ import {
     RolesGuard,
     ContractCreationLogger,
     ContractTransitionLogger,
-    PrismaContractTransitionTransactions,
+    PrismaContractMutationTransactions,
     PrismaContractCreationTransactions,
     PrismaContractDetailRepository,
     PrismaContractRegisterRepository,
     PrismaContractHistoryRepository,
     {
-      provide: CONTRACT_TRANSITION_TRANSACTIONS,
-      useExisting: PrismaContractTransitionTransactions,
+      provide: CONTRACT_MUTATION_TRANSACTIONS,
+      useExisting: PrismaContractMutationTransactions,
     },
     {
       provide: TransitionStatus,
       useFactory: (transactions) => new TransitionStatus(transactions),
-      inject: [CONTRACT_TRANSITION_TRANSACTIONS],
+      inject: [CONTRACT_MUTATION_TRANSACTIONS],
+    },
+    {
+      provide: EditDraftValues,
+      useFactory: (transactions) => new EditDraftValues(transactions),
+      inject: [CONTRACT_MUTATION_TRANSACTIONS],
     },
     {
       provide: CONTRACT_CREATION_TRANSACTIONS,

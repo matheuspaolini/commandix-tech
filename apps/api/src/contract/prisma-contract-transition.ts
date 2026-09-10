@@ -5,16 +5,17 @@ import { canonicalTemplateDefinition } from "./template-definition";
 import type {
   ActivationPersistence,
   ClosurePersistence,
-  ContractTransitionTransaction,
-  ContractTransitionTransactions,
+  ContractMutationTransaction,
+  ContractMutationTransactions,
+  DraftEditPersistence,
   LockedContract,
-} from "./transition-status";
+} from "./contract-mutation";
 
 type TransactionClient = Parameters<
   Parameters<PrismaClient["$transaction"]>[0]
 >[0];
 
-class PrismaContractTransitionTransaction implements ContractTransitionTransaction {
+class PrismaContractMutationTransaction implements ContractMutationTransaction {
   constructor(private readonly transaction: TransactionClient) {}
 
   async findForUpdate(input: {
@@ -66,6 +67,17 @@ class PrismaContractTransitionTransaction implements ContractTransitionTransacti
     await this.persistHistory(input.history);
   }
 
+  async persistDraftEdit(input: DraftEditPersistence): Promise<void> {
+    await this.transaction.contract.update({
+      where: { id: input.contract.id, tenantId: input.contract.tenantId },
+      data: {
+        values: input.contract.values as Prisma.InputJsonValue,
+        revision: input.contract.revision,
+      },
+    });
+    await this.persistHistory(input.history);
+  }
+
   private async persistContract(input: {
     id: string;
     tenantId: string;
@@ -82,7 +94,10 @@ class PrismaContractTransitionTransaction implements ContractTransitionTransacti
   }
 
   private async persistHistory(
-    input: ActivationPersistence["history"] | ClosurePersistence["history"],
+    input:
+      | ActivationPersistence["history"]
+      | ClosurePersistence["history"]
+      | DraftEditPersistence["history"],
   ): Promise<void> {
     await this.transaction.contractHistory.create({
       data: {
@@ -101,14 +116,14 @@ class PrismaContractTransitionTransaction implements ContractTransitionTransacti
 }
 
 @Injectable()
-export class PrismaContractTransitionTransactions implements ContractTransitionTransactions {
+export class PrismaContractMutationTransactions implements ContractMutationTransactions {
   constructor(private readonly database: DatabaseService) {}
 
   run<T>(
-    operation: (transaction: ContractTransitionTransaction) => Promise<T>,
+    operation: (transaction: ContractMutationTransaction) => Promise<T>,
   ): Promise<T> {
     return this.database.client.$transaction((transaction) =>
-      operation(new PrismaContractTransitionTransaction(transaction)),
+      operation(new PrismaContractMutationTransaction(transaction)),
     );
   }
 }

@@ -5,8 +5,8 @@ import { render, submitForm } from "@/shared/test";
 import {
   ContractCreationForm,
   type ContractCreationSession,
-  serializeValues,
 } from "./contract-creation-form";
+import { serializeContractValueForm } from "./contract-values-form";
 
 const template = {
   templateVersionId: "version-id",
@@ -94,7 +94,7 @@ test("submits typed values and resets after confirmation", async () => {
   await settle();
   await submitForm();
   await settle();
-  const serialized = serializeValues(template.fields, {
+  const serialized = serializeContractValueForm(template.fields, {
     title: { included: true, value: "Agreement" },
     note: { included: false, value: "" },
     amount: { included: true, value: "0" },
@@ -114,11 +114,14 @@ test("submits typed values and resets after confirmation", async () => {
       values: { title: "", amount: 0, approved: false, category: "standard" },
     },
     serialized: {
-      title: "Agreement",
-      amount: 0,
-      date: "2028-02-29",
-      approved: false,
-      category: "standard",
+      values: {
+        title: "Agreement",
+        amount: 0,
+        date: "2028-02-29",
+        approved: false,
+        category: "standard",
+      },
+      excludedOptionalKeys: ["note"],
     },
     message: expect.stringContaining("Saved Draft contract-id, revision 1"),
     detailLink: "/contracts/contract-id",

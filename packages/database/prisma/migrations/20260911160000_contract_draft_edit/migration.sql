@@ -1,0 +1,1 @@
+ALTER TYPE "ContractHistoryAction" ADD VALUE 'EDITED' BEFORE 'ACTIVATED';

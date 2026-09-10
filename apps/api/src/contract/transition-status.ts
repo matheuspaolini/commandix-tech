@@ -2,13 +2,13 @@ import {
   CONTRACT_ACTIVATED_EVENT_TYPE,
   CONTRACT_ACTIVATED_SCHEMA_VERSION,
 } from "@commandix/contract-events";
+import type { ContractMutationTransactions } from "./contract-mutation";
+import type { ContractSnapshot } from "./contract-snapshot";
 import {
   ContractNotFound,
   ContractRevisionConflict,
   ContractStatusConflict,
 } from "./contract-errors";
-import type { ContractSnapshot } from "./contract-snapshot";
-import type { ContractValues } from "./contract-values";
 import type { ContractDetail, ContractStatus } from "./read-contract-detail";
 
 export {
@@ -28,81 +28,6 @@ export class ContractLifecycle {
 }
 
 export type TransitionTarget = "ACTIVE" | "CLOSED";
-
-export type LockedContract = {
-  id: string;
-  tenantId: string;
-  status: ContractStatus;
-  revision: number;
-  values: ContractValues;
-  templateVersion: ContractDetail["templateVersion"];
-};
-
-export type ActivationPersistence = {
-  contract: {
-    id: string;
-    tenantId: string;
-    status: "ACTIVE";
-    revision: number;
-  };
-  history: {
-    id: string;
-    tenantId: string;
-    contractId: string;
-    actorId: string;
-    action: "ACTIVATED";
-    revision: number;
-    occurredAt: Date;
-    before: ContractSnapshot;
-    after: ContractSnapshot;
-  };
-  event: {
-    eventId: string;
-    eventType: typeof CONTRACT_ACTIVATED_EVENT_TYPE;
-    schemaVersion: typeof CONTRACT_ACTIVATED_SCHEMA_VERSION;
-    tenantId: string;
-    contractId: string;
-    activationRevision: number;
-    occurredAt: Date;
-    correlationId: string;
-    nextAttemptAt: Date;
-  };
-};
-
-export type ClosurePersistence = {
-  contract: {
-    id: string;
-    tenantId: string;
-    status: "CLOSED";
-    revision: number;
-  };
-  history: {
-    id: string;
-    tenantId: string;
-    contractId: string;
-    actorId: string;
-    action: "CLOSED";
-    revision: number;
-    occurredAt: Date;
-    before: ContractSnapshot;
-    after: ContractSnapshot;
-  };
-};
-
-export interface ContractTransitionTransaction {
-  findForUpdate(input: {
-    tenantId: string;
-    contractId: string;
-  }): Promise<LockedContract | null>;
-  persistActivation(input: ActivationPersistence): Promise<void>;
-  persistClosure(input: ClosurePersistence): Promise<void>;
-}
-
-export interface ContractTransitionTransactions {
-  run<T>(
-    operation: (transaction: ContractTransitionTransaction) => Promise<T>,
-  ): Promise<T>;
-}
 
 type TransitionCommandContext = {
   tenantId: string;
@@ -132,7 +57,7 @@ const UUIDS: TransitionIdGenerator = { next: () => crypto.randomUUID() };
 
 export class TransitionStatus {
   constructor(
-    private readonly transactions: ContractTransitionTransactions,
+    private readonly transactions: ContractMutationTransactions,
     private readonly clock: TransitionClock = SYSTEM_CLOCK,
     private readonly ids: TransitionIdGenerator = UUIDS,
   ) {}
@@ -214,7 +139,3 @@ export class TransitionStatus {
     });
   }
 }
-
-export const CONTRACT_TRANSITION_TRANSACTIONS = Symbol(
-  "CONTRACT_TRANSITION_TRANSACTIONS",
-);
