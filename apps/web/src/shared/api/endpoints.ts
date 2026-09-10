@@ -5,4 +5,5 @@ export const API_ENDPOINTS = {
   identity: "/api/auth/identity",
   activeTemplate: "/api/templates/active",
   contracts: "/api/contracts",
+  contractDetail: (contractId: string) => `/api/contracts/${contractId}`,
 } as const;

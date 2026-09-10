@@ -192,6 +192,19 @@ values return `400 INVALID_CONTRACT_VALUES` with keyed issue codes. A Tenant
 without an active Template receives `409 ACTIVE_TEMPLATE_REQUIRED`. Contract and
 creation History commit atomically; creation History has no before snapshot.
 
+Both roles can follow the returned location to read that Contract with the saved
+Template version used at creation, even after another version becomes active:
+
+```sh
+curl -i http://localhost:8080/api/contracts/CONTRACT_ID \
+  -H "authorization: Bearer $token"
+```
+
+The response includes status, revision, saved values, and
+`templateVersion: { id, fields }`. Missing and foreign-Tenant identifiers both
+return `404 CONTRACT_NOT_FOUND`. The browser supports direct authenticated
+`/contracts/{id}` navigation and returns to that route after sign-in.
+
 ## Develop and verify
 
 Install Bun 1.4.0 for host commands (Docker Compose and Bash are also needed for
@@ -217,6 +230,7 @@ For an individual HTTP test file against existing reachable development dependen
 
 ```sh
 export DATABASE_URL='postgresql://commandix_runtime:local_runtime_password@localhost:5432/commandix'
+export TEST_DATABASE_URL='postgresql://commandix_migrator:local_migration_password@localhost:5432/commandix'
 export RABBITMQ_URL='amqp://commandix:local_broker_password@localhost:5672'
 export JWT_SECRET='local_development_jwt_secret_32_chars'
 bun run test

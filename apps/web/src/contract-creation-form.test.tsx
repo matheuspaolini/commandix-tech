@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
 import { act } from "react";
+import { MemoryRouter } from "react-router";
 import { render, submitForm } from "@/shared/test";
 import {
   ContractCreationForm,
@@ -49,7 +50,11 @@ test("renders typed controls with visible falsy defaults", async () => {
   const session = {
     requestJson: async () => template,
   } as ContractCreationSession;
-  await render(<ContractCreationForm session={session} />);
+  await render(
+    <MemoryRouter>
+      <ContractCreationForm session={session} />
+    </MemoryRouter>,
+  );
   await settle();
   expect({
     controls: template.fields.map(
@@ -81,7 +86,11 @@ test("submits typed values and resets after confirmation", async () => {
       };
     },
   } as ContractCreationSession;
-  await render(<ContractCreationForm session={session} />);
+  await render(
+    <MemoryRouter>
+      <ContractCreationForm session={session} />
+    </MemoryRouter>,
+  );
   await settle();
   await submitForm();
   await settle();
@@ -97,6 +106,7 @@ test("submits typed values and resets after confirmation", async () => {
     body,
     serialized,
     message: document.body.textContent,
+    detailLink: document.querySelector("a")?.getAttribute("href"),
     reset: (document.getElementById("contract-title") as HTMLInputElement)
       .value,
   }).toStrictEqual({
@@ -111,6 +121,7 @@ test("submits typed values and resets after confirmation", async () => {
       category: "standard",
     },
     message: expect.stringContaining("Saved Draft contract-id, revision 1"),
+    detailLink: "/contracts/contract-id",
     reset: "",
   });
 });

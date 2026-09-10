@@ -9,7 +9,10 @@ import type { Response } from "express";
 import { requestContext } from "./http";
 
 export type PublicErrorBody = {
-  code: "ACTIVE_TEMPLATE_REQUIRED" | "INVALID_CONTRACT_VALUES";
+  code:
+    | "ACTIVE_TEMPLATE_REQUIRED"
+    | "INVALID_CONTRACT_VALUES"
+    | "CONTRACT_NOT_FOUND";
   issues?: { key?: string; code: string }[];
 };
 

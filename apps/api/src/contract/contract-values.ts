@@ -19,6 +19,24 @@ export class InvalidContractValues extends Error {
   }
 }
 
+export function canonicalContractValues(input: unknown): ContractValues {
+  if (!isRecord(input))
+    throw new InvalidContractValues([{ code: "INVALID_TYPE" }]);
+
+  const values: ContractValues = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (
+      typeof value !== "string" &&
+      typeof value !== "boolean" &&
+      !(typeof value === "number" && Number.isFinite(value))
+    ) {
+      throw new InvalidContractValues([{ key, code: "INVALID_TYPE" }]);
+    }
+    values[key] = canonicalNumber(value);
+  }
+  return values;
+}
+
 export function resolveContractValues(
   definition: TemplateDefinition,
   supplied: unknown,

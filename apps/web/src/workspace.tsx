@@ -1,69 +1,70 @@
-import { type ChangeEvent, type SubmitEvent, useEffect, useState } from "react";
+import {
+  type ChangeEvent,
+  type SubmitEvent,
+  useCallback,
+  useEffect,
+  useState,
+} from "react";
+import {
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+  useSearchParams,
+} from "react-router";
 
 import {
   API_ENDPOINTS,
   BrowserSession,
   client,
+  isUuidV4,
   type SignInForm,
 } from "@/shared/api";
 import { PageShell } from "@/shared/ui";
 import { ContractCreationForm } from "./contract-creation-form";
+import { ContractDetailPage, RouteNotFoundPage } from "./contract-detail";
 
 type Identity = {
   user: { id: string; email: string };
   tenant: { id: string; slug: string };
   role: "ADMIN" | "MEMBER";
 };
-
-const initialSignInForm: SignInForm = { slug: "", email: "", password: "" };
-const browserSession = new BrowserSession(client);
-
 type WorkspaceState =
   | { status: "restoring" }
   | { status: "signedOut"; signInFailed: boolean }
   | { status: "signingIn" }
   | { status: "signedIn"; identity: Identity };
 
+const initialSignInForm: SignInForm = { slug: "", email: "", password: "" };
+const browserSession = new BrowserSession(client);
+
 export function Workspace() {
-  const [form, setForm] = useState(initialSignInForm);
   const [state, setState] = useState<WorkspaceState>({ status: "restoring" });
+  const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     let active = true;
-
     void restoreIdentity().then(
       (identity) => active && setState({ status: "signedIn", identity }),
       () => active && setState({ status: "signedOut", signInFailed: false }),
     );
-
     return () => {
       active = false;
     };
   }, []);
 
-  async function signIn(event: SubmitEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setState({ status: "signingIn" });
-    try {
-      await browserSession.signIn(form);
-      const identity = await requestIdentity();
-      setState({ status: "signedIn", identity });
-    } catch {
-      browserSession.clear();
-      setState({ status: "signedOut", signInFailed: true });
-    }
-  }
+  const authenticationLost = useCallback(() => {
+    browserSession.clear();
+    setState({ status: "signedOut", signInFailed: false });
+    navigate(signInDestination(location.pathname), { replace: true });
+  }, [location.pathname, navigate]);
 
   async function signOut() {
     setState({ status: "signedOut", signInFailed: false });
+    navigate("/sign-in", { replace: true });
     await browserSession.signOut();
-  }
-
-  function updateField(event: ChangeEvent<HTMLInputElement>) {
-    const field = event.target.name as keyof SignInForm;
-    const value = event.target.value;
-
-    setForm((currentForm) => ({ ...currentForm, [field]: value }));
   }
 
   if (state.status === "restoring") {
@@ -79,81 +80,187 @@ export function Workspace() {
   if (state.status === "signedIn") {
     return (
       <PageShell>
-        <main>
-          <p className="eyebrow">{state.identity.role}</p>
-          <h1>{state.identity.tenant.slug}</h1>
-          <p className="intro">You are signed in to your contract workspace.</p>
-          <button type="button" onClick={signOut}>
-            Sign out
-          </button>
-          <ContractCreationForm session={browserSession} />
-        </main>
+        <Routes>
+          <Route
+            path="/sign-in"
+            element={
+              <Navigate replace to={returnDestination(location.search)} />
+            }
+          />
+          <Route
+            path="/"
+            element={
+              <WorkspaceHome identity={state.identity} signOut={signOut} />
+            }
+          />
+          <Route
+            path="/contracts/:contractId"
+            element={
+              <ContractDetailPage
+                session={browserSession}
+                onAuthenticationLost={authenticationLost}
+              />
+            }
+          />
+          <Route path="*" element={<RouteNotFoundPage />} />
+        </Routes>
       </PageShell>
     );
   }
 
   return (
     <PageShell>
-      <main className="sign-in-main">
-        <section className="sign-in-card" aria-labelledby="sign-in-heading">
-          <p className="eyebrow">Contract workspace</p>
-          <h1 id="sign-in-heading">Sign in to Commandix</h1>
-          <p className="intro">
-            Use your tenant workspace credentials to continue.
-          </p>
-          <form
-            onSubmit={signIn}
-            aria-describedby={
-              state.status === "signedOut" && state.signInFailed
-                ? "sign-in-error"
-                : undefined
-            }
-          >
-            <label htmlFor="tenant-slug">Tenant slug</label>
-            <input
-              id="tenant-slug"
-              name="slug"
-              autoComplete="organization"
-              disabled={state.status === "signingIn"}
-              required
-              value={form.slug}
-              onChange={updateField}
+      <Routes>
+        <Route
+          path="/sign-in"
+          element={
+            <SignInPage
+              failed={state.status === "signedOut" && state.signInFailed}
+              pending={state.status === "signingIn"}
+              onStateChange={setState}
             />
-            <label htmlFor="email">Email address</label>
-            <input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              disabled={state.status === "signingIn"}
-              required
-              value={form.email}
-              onChange={updateField}
-            />
-            <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              disabled={state.status === "signingIn"}
-              required
-              value={form.password}
-              onChange={updateField}
-            />
-            {state.status === "signedOut" && state.signInFailed ? (
-              <p id="sign-in-error" className="form-error" role="alert">
-                We could not sign you in. Check your details and try again.
-              </p>
-            ) : null}
-            <button type="submit" disabled={state.status === "signingIn"}>
-              {state.status === "signingIn" ? "Signing in…" : "Sign in"}
-            </button>
-          </form>
-        </section>
-      </main>
+          }
+        />
+        <Route
+          path="/"
+          element={<Navigate replace to={signInDestination("/")} />}
+        />
+        <Route path="/contracts/:contractId" element={<ProtectedRedirect />} />
+        <Route path="*" element={<RouteNotFoundPage />} />
+      </Routes>
     </PageShell>
   );
+}
+
+function WorkspaceHome({
+  identity,
+  signOut,
+}: {
+  identity: Identity;
+  signOut: () => Promise<void>;
+}) {
+  return (
+    <main>
+      <p className="eyebrow">{identity.role}</p>
+      <h1>{identity.tenant.slug}</h1>
+      <p className="intro">You are signed in to your contract workspace.</p>
+      <button type="button" onClick={() => void signOut()}>
+        Sign out
+      </button>
+      <ContractCreationForm session={browserSession} />
+    </main>
+  );
+}
+
+function SignInPage({
+  failed,
+  pending,
+  onStateChange,
+}: {
+  failed: boolean;
+  pending: boolean;
+  onStateChange: (state: WorkspaceState) => void;
+}) {
+  const [form, setForm] = useState(initialSignInForm);
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+
+  async function signIn(event: SubmitEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onStateChange({ status: "signingIn" });
+    try {
+      await browserSession.signIn(form);
+      const identity = await requestIdentity();
+      onStateChange({ status: "signedIn", identity });
+      navigate(validateReturnTo(searchParams.get("returnTo")), {
+        replace: true,
+      });
+    } catch {
+      browserSession.clear();
+      onStateChange({ status: "signedOut", signInFailed: true });
+    }
+  }
+
+  function updateField(event: ChangeEvent<HTMLInputElement>) {
+    const field = event.target.name as keyof SignInForm;
+    setForm((current) => ({ ...current, [field]: event.target.value }));
+  }
+
+  return (
+    <main className="sign-in-main">
+      <section className="sign-in-card" aria-labelledby="sign-in-heading">
+        <p className="eyebrow">Contract workspace</p>
+        <h1 id="sign-in-heading">Sign in to Commandix</h1>
+        <p className="intro">
+          Use your tenant workspace credentials to continue.
+        </p>
+        <form
+          onSubmit={signIn}
+          aria-describedby={failed ? "sign-in-error" : undefined}
+        >
+          <label htmlFor="tenant-slug">Tenant slug</label>
+          <input
+            id="tenant-slug"
+            name="slug"
+            autoComplete="organization"
+            disabled={pending}
+            required
+            value={form.slug}
+            onChange={updateField}
+          />
+          <label htmlFor="email">Email address</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            disabled={pending}
+            required
+            value={form.email}
+            onChange={updateField}
+          />
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            disabled={pending}
+            required
+            value={form.password}
+            onChange={updateField}
+          />
+          {failed ? (
+            <p id="sign-in-error" className="form-error" role="alert">
+              We could not sign you in. Check your details and try again.
+            </p>
+          ) : null}
+          <button type="submit" disabled={pending}>
+            {pending ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+      </section>
+    </main>
+  );
+}
+
+function ProtectedRedirect() {
+  const location = useLocation();
+  return <Navigate replace to={signInDestination(location.pathname)} />;
+}
+
+export function validateReturnTo(value: string | null): string {
+  if (value === "/") return value;
+  const match = /^\/contracts\/([^/?#]+)$/.exec(value ?? "");
+  return match && isUuidV4(match[1]!) ? value! : "/";
+}
+
+function signInDestination(pathname: string): string {
+  return `/sign-in?returnTo=${encodeURIComponent(pathname)}`;
+}
+
+function returnDestination(search: string): string {
+  return validateReturnTo(new URLSearchParams(search).get("returnTo"));
 }
 
 async function restoreIdentity(): Promise<Identity> {

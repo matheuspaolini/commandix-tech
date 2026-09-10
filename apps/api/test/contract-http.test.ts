@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { createPrismaClient } from "@commandix/database";
+import { createPrismaClient, PrismaClient } from "@commandix/database";
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { createApp } from "../src/app";
@@ -10,6 +10,10 @@ Bun.env.AUTH_COOKIE_SECURE ??= "false";
 
 const PASSWORD = "Commandix-demo-2026!";
 const client = createPrismaClient();
+const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
+const cleanupClient = testDatabaseUrl
+  ? new PrismaClient({ datasourceUrl: testDatabaseUrl })
+  : null;
 let app: INestApplication;
 const tokens = new Map<string, string>();
 
@@ -25,6 +29,24 @@ function create(token: string, values: unknown, extras: object = {}) {
     .set("Authorization", `Bearer ${token}`)
     .send({ values, ...extras });
 }
+function read(token: string, contractId: string) {
+  return request(app.getHttpServer())
+    .get(`/contracts/${contractId}`)
+    .set("Authorization", `Bearer ${token}`);
+}
+async function removeTemplateVersionFixture(versionId: string) {
+  if (!cleanupClient) throw new Error("Missing TEST_DATABASE_URL");
+  await cleanupClient.$executeRawUnsafe(
+    'ALTER TABLE "template_versions" DISABLE TRIGGER template_versions_immutable',
+  );
+  try {
+    await cleanupClient.templateVersion.delete({ where: { id: versionId } });
+  } finally {
+    await cleanupClient.$executeRawUnsafe(
+      'ALTER TABLE "template_versions" ENABLE TRIGGER template_versions_immutable',
+    );
+  }
+}
 
 beforeAll(async () => {
   app = await createApp();
@@ -34,7 +56,11 @@ beforeAll(async () => {
       tokens.set(`${slug}:${role}`, await signIn(slug, `${role}@${slug}.test`));
 });
 afterAll(async () => {
-  await Promise.all([app.close(), client.$disconnect()]);
+  await Promise.all([
+    app.close(),
+    client.$disconnect(),
+    cleanupClient?.$disconnect(),
+  ]);
 });
 
 describe("POST /contracts", () => {
@@ -191,5 +217,146 @@ describe("POST /contracts", () => {
       code: "ACTIVE_TEMPLATE_REQUIRED",
       persisted: 0,
     });
+  });
+});
+
+describe("GET /contracts/:id", () => {
+  test("allows both roles to read an own-Tenant Contract", async () => {
+    const created = await create(tokens.get("acme:admin")!, {
+      title: "Readable contract",
+      "effective-date": "2028-02-29",
+      approved: false,
+      amount: 0,
+    });
+    const responses = await Promise.all([
+      read(tokens.get("acme:admin")!, created.body.id),
+      read(tokens.get("acme:member")!, created.body.id),
+    ]);
+
+    expect(
+      responses.map((response) => ({
+        status: response.status,
+        body: response.body,
+      })),
+    ).toStrictEqual(
+      responses.map((response) => ({
+        status: 200,
+        body: {
+          id: created.body.id,
+          status: "DRAFT",
+          revision: 1,
+          values: {
+            title: "Readable contract",
+            amount: 0,
+            "effective-date": "2028-02-29",
+            approved: false,
+            category: "standard",
+          },
+          templateVersion: {
+            id: created.body.templateVersionId,
+            fields: expect.any(Array),
+          },
+        },
+      })),
+    );
+  });
+
+  test("hides foreign and missing Contract identifiers behind the same 404", async () => {
+    const foreign = await create(tokens.get("globex:admin")!, {
+      title: "Foreign contract",
+      "effective-date": "2027-01-01",
+    });
+    const responses = await Promise.all([
+      read(tokens.get("acme:admin")!, foreign.body.id),
+      read(tokens.get("acme:member")!, foreign.body.id),
+      read(tokens.get("acme:admin")!, crypto.randomUUID()),
+    ]);
+
+    expect(
+      responses.map((response) => ({
+        status: response.status,
+        code: response.body.code,
+      })),
+    ).toStrictEqual([
+      { status: 404, code: "CONTRACT_NOT_FOUND" },
+      { status: 404, code: "CONTRACT_NOT_FOUND" },
+      { status: 404, code: "CONTRACT_NOT_FOUND" },
+    ]);
+  });
+
+  test("rejects a malformed Contract identifier", async () => {
+    const response = await read(tokens.get("acme:admin")!, "not-a-uuid");
+
+    expect({
+      status: response.status,
+      error: response.body.error,
+    }).toStrictEqual({ status: 400, error: "Bad Request" });
+  });
+
+  test("reads labels and types from the Contract's saved Template version", async () => {
+    if (!cleanupClient) throw new Error("Missing TEST_DATABASE_URL");
+    const created = await create(tokens.get("acme:admin")!, {
+      title: "Versioned contract",
+      "effective-date": "2028-01-31",
+    });
+    const tenant = await client.tenant.findUniqueOrThrow({
+      where: { slug: "acme" },
+      include: { logicalTemplate: true },
+    });
+    const logicalTemplate = tenant.logicalTemplate!;
+    const replacementVersionId = crypto.randomUUID();
+    const replacementDefinition = {
+      fields: [
+        {
+          key: "replacement",
+          label: "Replacement field",
+          type: "text",
+          required: true,
+        },
+      ],
+    };
+
+    try {
+      await client.templateVersion.create({
+        data: {
+          id: replacementVersionId,
+          tenantId: tenant.id,
+          logicalTemplateId: logicalTemplate.id,
+          definition: replacementDefinition,
+        },
+      });
+      await client.logicalTemplate.update({
+        where: { id: logicalTemplate.id },
+        data: { activeVersionId: replacementVersionId },
+      });
+
+      const response = await read(tokens.get("acme:member")!, created.body.id);
+
+      expect({
+        status: response.status,
+        savedVersionId: response.body.templateVersion.id,
+        savedFields: response.body.templateVersion.fields,
+        excludesReplacement: response.body.templateVersion.fields.every(
+          (field: { key: string }) => field.key !== "replacement",
+        ),
+      }).toStrictEqual({
+        status: 200,
+        savedVersionId: created.body.templateVersionId,
+        savedFields: expect.arrayContaining([
+          expect.objectContaining({
+            key: "effective-date",
+            label: "Effective date",
+            type: "date",
+          }),
+        ]),
+        excludesReplacement: true,
+      });
+    } finally {
+      await client.logicalTemplate.update({
+        where: { id: logicalTemplate.id },
+        data: { activeVersionId: logicalTemplate.activeVersionId },
+      });
+      await removeTemplateVersionFixture(replacementVersionId);
+    }
   });
 });

@@ -13,6 +13,11 @@ import {
   CreateContract,
 } from "./create-contract";
 import { PrismaContractCreationTransactions } from "./prisma-contract-creation";
+import { PrismaContractDetailRepository } from "./prisma-contract-detail.repository";
+import {
+  CONTRACT_DETAIL_REPOSITORY,
+  ReadContractDetail,
+} from "./read-contract-detail";
 
 @Module({
   imports: [AuthModule],
@@ -21,6 +26,7 @@ import { PrismaContractCreationTransactions } from "./prisma-contract-creation";
     RolesGuard,
     ContractCreationLogger,
     PrismaContractCreationTransactions,
+    PrismaContractDetailRepository,
     {
       provide: CONTRACT_CREATION_TRANSACTIONS,
       useExisting: PrismaContractCreationTransactions,
@@ -29,6 +35,15 @@ import { PrismaContractCreationTransactions } from "./prisma-contract-creation";
       provide: CreateContract,
       useFactory: (transactions) => new CreateContract(transactions),
       inject: [CONTRACT_CREATION_TRANSACTIONS],
+    },
+    {
+      provide: CONTRACT_DETAIL_REPOSITORY,
+      useExisting: PrismaContractDetailRepository,
+    },
+    {
+      provide: ReadContractDetail,
+      useFactory: (contracts) => new ReadContractDetail(contracts),
+      inject: [CONTRACT_DETAIL_REPOSITORY],
     },
     PrismaActiveTemplateRepository,
     {

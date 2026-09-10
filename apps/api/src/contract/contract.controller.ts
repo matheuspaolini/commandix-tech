@@ -1,4 +1,14 @@
-import { Body, Controller, Post, Req, Res, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from "@nestjs/common";
 import type { Response } from "express";
 import {
   AccessTokenGuard,
@@ -10,6 +20,7 @@ import { ContractCreationLogger } from "./contract-creation.logger";
 import { InvalidContractValues } from "./contract-values";
 import { ActiveTemplateRequired, CreateContract } from "./create-contract";
 import { CreateContractDto } from "./create-contract.dto";
+import { ContractNotFound, ReadContractDetail } from "./read-contract-detail";
 
 @Controller("contracts")
 @UseGuards(AccessTokenGuard, RolesGuard)
@@ -17,7 +28,27 @@ export class ContractController {
   constructor(
     private readonly createContract: CreateContract,
     private readonly logger: ContractCreationLogger,
+    private readonly readContractDetail: ReadContractDetail,
   ) {}
+
+  @Get(":id")
+  @Roles("ADMIN", "MEMBER")
+  async detail(
+    @Req() request: AuthenticatedRequest,
+    @Param("id", new ParseUUIDPipe({ version: "4" })) contractId: string,
+  ) {
+    try {
+      return await this.readContractDetail.execute({
+        tenantId: request.identity!.tenantId,
+        contractId,
+      });
+    } catch (error) {
+      if (error instanceof ContractNotFound) {
+        throw new PublicHttpException(404, { code: "CONTRACT_NOT_FOUND" });
+      }
+      throw error;
+    }
+  }
 
   @Post()
   @Roles("ADMIN", "MEMBER")

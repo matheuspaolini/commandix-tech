@@ -1,18 +1,13 @@
 import { type SubmitEvent, useEffect, useState } from "react";
+import { Link } from "react-router";
 import {
   API_ENDPOINTS,
   ApiResponseError,
   type AuthenticatedJsonOptions,
+  isTemplateField,
+  type TemplateField,
 } from "@/shared/api";
 
-type TemplateField = {
-  key: string;
-  label: string;
-  type: "text" | "number" | "date" | "boolean" | "enum";
-  required: boolean;
-  default?: string | number | boolean;
-  options?: string[];
-};
 type ActiveTemplate = { templateVersionId: string; fields: TemplateField[] };
 type CreatedContract = {
   id: string;
@@ -273,7 +268,10 @@ export function ContractCreationForm({
       {creation.status === "saved" ? (
         <p className="save-confirmation" role="status">
           Saved Draft {creation.contract.id}, revision{" "}
-          {creation.contract.revision}.
+          {creation.contract.revision}.{" "}
+          <Link to={`/contracts/${creation.contract.id}`}>
+            View Draft contract
+          </Link>
         </p>
       ) : null}
     </section>
@@ -349,7 +347,8 @@ function isActiveTemplate(value: unknown): value is ActiveTemplate {
   return (
     isRecord(value) &&
     typeof value.templateVersionId === "string" &&
-    Array.isArray(value.fields)
+    Array.isArray(value.fields) &&
+    value.fields.every(isTemplateField)
   );
 }
 function isCreatedContract(value: unknown): value is CreatedContract {

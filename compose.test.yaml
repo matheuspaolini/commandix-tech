@@ -9,3 +9,6 @@ services:
   web:
     ports: !override
       - "127.0.0.1::80"
+  api:
+    environment:
+      TEST_DATABASE_URL: postgresql://commandix_migrator:${MIGRATION_PASSWORD}@postgres:5432/commandix
