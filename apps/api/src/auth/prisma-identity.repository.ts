@@ -11,7 +11,7 @@ import type {
 export class PrismaIdentityRepository implements IdentityRepository {
   constructor(private readonly database: DatabaseService) {}
 
-  async findForLogin(
+  async findForSignIn(
     slug: string,
     email: string,
   ): Promise<StoredIdentity | null> {

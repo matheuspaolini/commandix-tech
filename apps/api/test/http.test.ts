@@ -13,6 +13,8 @@ import request from "supertest";
 import { AppModule, createApp } from "../src/app";
 
 Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
+Bun.env.AUTH_ALLOWED_ORIGINS ??= "http://localhost:8080";
+Bun.env.AUTH_COOKIE_SECURE ??= "false";
 
 const ACCEPTED_CORRELATION_ID = "ae68edcd-e14f-4e0f-8a56-0c61d91b069e";
 const UPPERCASE_CORRELATION_ID = "AE68EDCD-E14F-4E0F-8A56-0C61D91B069E";

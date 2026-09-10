@@ -1,6 +1,11 @@
-import { type ChangeEvent, type FormEvent, useState } from "react";
+import { type ChangeEvent, type FormEvent, useEffect, useState } from "react";
 
-import { API_ENDPOINTS, client } from "@/shared/api";
+import {
+  API_ENDPOINTS,
+  BrowserSession,
+  client,
+  type SignInForm,
+} from "@/shared/api";
 import { PageShell } from "@/shared/ui";
 
 type Identity = {
@@ -9,28 +14,48 @@ type Identity = {
   role: "ADMIN" | "MEMBER";
 };
 
-type SignInForm = { slug: string; email: string; password: string };
-
 const initialSignInForm: SignInForm = { slug: "", email: "", password: "" };
+const browserSession = new BrowserSession(client);
+
+type WorkspaceState =
+  | { status: "restoring" }
+  | { status: "signedOut"; signInFailed: boolean }
+  | { status: "signingIn" }
+  | { status: "signedIn"; identity: Identity };
 
 export function Workspace() {
   const [form, setForm] = useState(initialSignInForm);
-  const [identity, setIdentity] = useState<Identity | null>(null);
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState(false);
+  const [state, setState] = useState<WorkspaceState>({ status: "restoring" });
+
+  useEffect(() => {
+    let active = true;
+
+    void restoreIdentity().then(
+      (identity) => active && setState({ status: "signedIn", identity }),
+      () => active && setState({ status: "signedOut", signInFailed: false }),
+    );
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPending(true);
-    setError(false);
+    setState({ status: "signingIn" });
     try {
-      setIdentity(await requestIdentity(form));
+      await browserSession.signIn(form);
+      const identity = await requestIdentity();
+      setState({ status: "signedIn", identity });
     } catch {
-      setIdentity(null);
-      setError(true);
-    } finally {
-      setPending(false);
+      browserSession.clear();
+      setState({ status: "signedOut", signInFailed: true });
     }
+  }
+
+  async function signOut() {
+    setState({ status: "signedOut", signInFailed: false });
+    await browserSession.signOut();
   }
 
   function updateField(event: ChangeEvent<HTMLInputElement>) {
@@ -40,13 +65,26 @@ export function Workspace() {
     setForm((currentForm) => ({ ...currentForm, [field]: value }));
   }
 
-  if (identity) {
+  if (state.status === "restoring") {
+    return (
+      <PageShell>
+        <main aria-busy="true">
+          <p>Restoring your session…</p>
+        </main>
+      </PageShell>
+    );
+  }
+
+  if (state.status === "signedIn") {
     return (
       <PageShell>
         <main>
-          <p className="eyebrow">{identity.role}</p>
-          <h1>{identity.tenant.slug}</h1>
+          <p className="eyebrow">{state.identity.role}</p>
+          <h1>{state.identity.tenant.slug}</h1>
           <p className="intro">You are signed in to your contract workspace.</p>
+          <button type="button" onClick={signOut}>
+            Sign out
+          </button>
         </main>
       </PageShell>
     );
@@ -63,14 +101,18 @@ export function Workspace() {
           </p>
           <form
             onSubmit={signIn}
-            aria-describedby={error ? "sign-in-error" : undefined}
+            aria-describedby={
+              state.status === "signedOut" && state.signInFailed
+                ? "sign-in-error"
+                : undefined
+            }
           >
             <label htmlFor="tenant-slug">Tenant slug</label>
             <input
               id="tenant-slug"
               name="slug"
               autoComplete="organization"
-              disabled={pending}
+              disabled={state.status === "signingIn"}
               required
               value={form.slug}
               onChange={updateField}
@@ -81,7 +123,7 @@ export function Workspace() {
               name="email"
               type="email"
               autoComplete="email"
-              disabled={pending}
+              disabled={state.status === "signingIn"}
               required
               value={form.email}
               onChange={updateField}
@@ -92,18 +134,18 @@ export function Workspace() {
               name="password"
               type="password"
               autoComplete="current-password"
-              disabled={pending}
+              disabled={state.status === "signingIn"}
               required
               value={form.password}
               onChange={updateField}
             />
-            {error ? (
+            {state.status === "signedOut" && state.signInFailed ? (
               <p id="sign-in-error" className="form-error" role="alert">
                 We could not sign you in. Check your details and try again.
               </p>
             ) : null}
-            <button type="submit" disabled={pending}>
-              {pending ? "Signing in…" : "Sign in"}
+            <button type="submit" disabled={state.status === "signingIn"}>
+              {state.status === "signingIn" ? "Signing in…" : "Sign in"}
             </button>
           </form>
         </section>
@@ -112,30 +154,15 @@ export function Workspace() {
   );
 }
 
-async function requestIdentity(form: SignInForm): Promise<Identity> {
-  const credentials = await client.requestJson(API_ENDPOINTS.signIn, {
-    init: {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    },
-    isValid: hasAccessToken,
-  });
-
-  return client.requestJson(API_ENDPOINTS.identity, {
-    init: {
-      headers: { Authorization: `Bearer ${credentials.accessToken}` },
-    },
-    isValid: isIdentity,
-  });
+async function restoreIdentity(): Promise<Identity> {
+  await browserSession.restore();
+  return requestIdentity();
 }
 
-function hasAccessToken(value: unknown): value is { accessToken: string } {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    typeof (value as { accessToken?: unknown }).accessToken === "string"
-  );
+function requestIdentity(): Promise<Identity> {
+  return browserSession.requestJson(API_ENDPOINTS.identity, {
+    isValid: isIdentity,
+  });
 }
 
 function isIdentity(value: unknown): value is Identity {

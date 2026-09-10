@@ -9,6 +9,12 @@ export type RequestJsonOptions<Value> = {
   isValid: TypeGuard<Value>;
 };
 
+export class ApiResponseError extends Error {
+  constructor(readonly status: number) {
+    super(`API request failed with status ${status}`);
+  }
+}
+
 export class Client {
   constructor(private readonly fetcher: Fetcher) {}
 
@@ -18,13 +24,18 @@ export class Client {
   ): Promise<Value> {
     const response = await this.fetcher(url, init);
 
-    if (!response.ok) throw new Error("Request failed");
+    if (!response.ok) throw new ApiResponseError(response.status);
 
     const body: unknown = await response.json();
 
     if (!isValid(body)) throw new Error("Invalid response");
 
     return body;
+  }
+
+  async request(url: string, init?: RequestInit): Promise<void> {
+    const response = await this.fetcher(url, init);
+    if (!response.ok) throw new ApiResponseError(response.status);
   }
 }
 

@@ -57,6 +57,8 @@ services:
       DATABASE_URL: postgresql://commandix_runtime:${RUNTIME_PASSWORD}@postgres:5432/commandix
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
       JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      AUTH_ALLOWED_ORIGINS: ${AUTH_ALLOWED_ORIGINS:?Set AUTH_ALLOWED_ORIGINS}
+      AUTH_COOKIE_SECURE: ${AUTH_COOKIE_SECURE:?Set AUTH_COOKIE_SECURE}
     depends_on: &application-dependencies
       postgres:
         condition: service_healthy

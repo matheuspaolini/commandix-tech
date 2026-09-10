@@ -1,20 +1,20 @@
 import { canonicalIdentity, type IdentityInput } from "../tenant/identity";
-import { AccessTokenService, type AccessTokenClaims } from "./access-token";
+import type { AccessTokenClaims } from "./access-token";
+import { AuthenticationFailed } from "./errors";
 import type { PasswordHasher } from "./password";
 import type { IdentityRepository } from "./repository";
-
-export class AuthenticationFailed extends Error {}
+import { RefreshSessionService } from "./refresh-session.service";
 
 export class AuthService {
   constructor(
     private readonly identities: IdentityRepository,
     private readonly passwords: PasswordHasher,
-    private readonly tokens: AccessTokenService,
+    private readonly refreshSessions: RefreshSessionService,
   ) {}
 
-  async login(input: IdentityInput) {
+  async signIn(input: IdentityInput) {
     const identity = canonicalIdentity(input);
-    const stored = await this.identities.findForLogin(
+    const stored = await this.identities.findForSignIn(
       identity.slug,
       identity.email,
     );
@@ -24,7 +24,7 @@ export class AuthService {
     ) {
       throw new AuthenticationFailed();
     }
-    return { accessToken: this.tokens.issue(stored) };
+    return this.refreshSessions.create(stored);
   }
 
   async identity(claims: AccessTokenClaims) {

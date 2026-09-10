@@ -12,7 +12,7 @@ export type StoredIdentity = {
 export type CreatedIdentity = Omit<StoredIdentity, "passwordHash">;
 
 export interface IdentityRepository {
-  findForLogin(slug: string, email: string): Promise<StoredIdentity | null>;
+  findForSignIn(slug: string, email: string): Promise<StoredIdentity | null>;
   findVerifiedIdentity(
     userId: string,
     tenantId: string,

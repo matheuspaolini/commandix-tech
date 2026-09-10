@@ -45,7 +45,10 @@ _Avoid_: Notification log when referring to contract changes.
 The durable record of an activation awaiting or having completed publication, with an identity preserved across delivery attempts. It represents that activation even if the contract has since closed.
 
 **Refresh session**:
-One login's renewable access relationship, encompassing its succession of rotated refresh credentials within a fixed seven-day lifetime. Revocation covers that succession but not independent logins.
+One sign-in's renewable access relationship and the revocation boundary for its succession of Refresh credentials within a fixed seven-day lifetime. Independent sign-ins create independent Refresh sessions.
+
+**Refresh credential**:
+A rotating, single-use proof belonging to one Refresh session. Reuse revokes that Refresh session without affecting independent sign-ins.
 
 **Notification log**:
 Persisted evidence that an activation event was processed, recorded once per event identity. It is not an email or a user-facing notification inbox.

@@ -8,6 +8,8 @@ import { DatabaseService } from "../src/database";
 import { PrismaOnboardingRepository } from "../src/tenant/onboarding.repository";
 
 Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
+Bun.env.AUTH_ALLOWED_ORIGINS ??= "http://localhost:8080";
+Bun.env.AUTH_COOKIE_SECURE ??= "false";
 
 const PASSWORD = "correct horse battery staple";
 const ADMIN_EMAIL = "admin@example.com";
@@ -54,9 +56,9 @@ function onboard(tenantSlug: string, overrides: Credentials = {}) {
     });
 }
 
-function login(tenantSlug: string, overrides: Credentials = {}) {
+function signIn(tenantSlug: string, overrides: Credentials = {}) {
   return request(app.getHttpServer())
-    .post("/auth/login")
+    .post("/auth/sign-in")
     .send({
       slug: tenantSlug,
       email: overrides.email ?? ADMIN_EMAIL,
@@ -96,6 +98,16 @@ async function deleteTenantIfPresent(tenantSlug: string): Promise<void> {
   });
   if (!tenant) return;
 
+  const users = await client.user.findMany({
+    where: { tenantId: tenant.id },
+    select: { id: true },
+  });
+  await client.refreshCredential.deleteMany({
+    where: { session: { userId: { in: users.map((user) => user.id) } } },
+  });
+  await client.refreshSession.deleteMany({
+    where: { userId: { in: users.map((user) => user.id) } },
+  });
   await client.user.deleteMany({ where: { tenantId: tenant.id } });
   await client.tenant.delete({ where: { id: tenant.id } });
 }
@@ -127,7 +139,7 @@ async function createAuthenticationScenario() {
   const persistedTenant = await client.tenant.findUnique({
     where: { id: onboarding.body.tenant.id },
   });
-  const authentication = await login(tenantSlug);
+  const authentication = await signIn(tenantSlug);
   const identityResponse = await authenticatedIdentity(
     authentication.body.accessToken,
   );
@@ -139,7 +151,7 @@ async function createAuthenticationScenario() {
     storedUser,
     slugUpdate,
     persistedSlug: persistedTenant?.slug,
-    login: authentication,
+    signIn: authentication,
     identity: {
       status: identityResponse.status,
       body: identityResponse.body,
@@ -150,7 +162,7 @@ async function createAuthenticationScenario() {
 async function createSharedEmailScenario() {
   const tenantSlugs = [createTenantSlug(), createTenantSlug()];
   const onboardingStatuses: number[] = [];
-  const loginStatuses: number[] = [];
+  const signInStatuses: number[] = [];
 
   for (const tenantSlug of tenantSlugs) {
     const response = await onboard(tenantSlug, { email: SHARED_EMAIL });
@@ -158,11 +170,11 @@ async function createSharedEmailScenario() {
   }
 
   for (const tenantSlug of tenantSlugs) {
-    const response = await login(tenantSlug, { email: SHARED_EMAIL });
-    loginStatuses.push(response.status);
+    const response = await signIn(tenantSlug, { email: SHARED_EMAIL });
+    signInStatuses.push(response.status);
   }
 
-  return { onboardingStatuses, loginStatuses };
+  return { onboardingStatuses, signInStatuses };
 }
 
 async function createConcurrentOnboardingScenario() {
@@ -268,12 +280,12 @@ describe("tenant-scoped authentication lifecycle", () => {
     expect(scenario.persistedSlug).toBe(scenario.tenantSlug);
   });
 
-  test("login succeeds", () => {
-    expect(scenario.login.status).toBe(200);
+  test("sign-in succeeds", () => {
+    expect(scenario.signIn.status).toBe(200);
   });
 
-  test("login returns an access token", () => {
-    expect(scenario.login.body.accessToken).toBeString();
+  test("sign-in returns an access token", () => {
+    expect(scenario.signIn.body.accessToken).toBeString();
   });
 
   test("verified identity ignores spoofed tenant and role inputs", () => {
@@ -306,7 +318,7 @@ describe("same email across tenants", () => {
   });
 
   test("authenticates the identity in both tenants", () => {
-    expect(scenario.loginStatuses.sort()).toStrictEqual([200, 200]);
+    expect(scenario.signInStatuses.sort()).toStrictEqual([200, 200]);
   });
 });
 
@@ -348,7 +360,7 @@ describe("nondisclosing authentication failures", () => {
   for (const failureCase of failureCases) {
     test(`does not disclose details for ${failureCase.name}`, async () => {
       const input = failureCase.input();
-      const response = await login(input.tenantSlug, {
+      const response = await signIn(input.tenantSlug, {
         email: input.email,
         password: input.password,
       });

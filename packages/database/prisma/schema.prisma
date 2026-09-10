@@ -22,14 +22,44 @@ model Tenant {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
-  tenantId     String   @map("tenant_id") @db.Uuid
-  email        String
-  passwordHash String   @map("password_hash")
-  role         UserRole
-  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  id              String           @id @default(uuid()) @db.Uuid
+  tenantId        String           @map("tenant_id") @db.Uuid
+  email           String
+  passwordHash    String           @map("password_hash")
+  role            UserRole
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Restrict)
+  refreshSessions RefreshSession[]
 
   @@unique([tenantId, email])
   @@map("users")
+}
+
+model RefreshSession {
+  id          String              @id @default(uuid()) @db.Uuid
+  userId      String              @map("user_id") @db.Uuid
+  createdAt   DateTime            @map("created_at") @db.Timestamptz(6)
+  expiresAt   DateTime            @map("expires_at") @db.Timestamptz(6)
+  revokedAt   DateTime?           @map("revoked_at") @db.Timestamptz(6)
+  user        User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  credentials RefreshCredential[]
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_sessions")
+}
+
+model RefreshCredential {
+  selector   String         @id @db.Uuid
+  sessionId  String         @map("session_id") @db.Uuid
+  secretHash String         @map("secret_hash")
+  generation Int
+  parentId   String?        @unique @map("parent_id") @db.Uuid
+  issuedAt   DateTime       @map("issued_at") @db.Timestamptz(6)
+  consumedAt DateTime?      @map("consumed_at") @db.Timestamptz(6)
+  session    RefreshSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+
+  @@unique([sessionId, generation])
+  @@index([sessionId])
+  @@map("refresh_credentials")
 }

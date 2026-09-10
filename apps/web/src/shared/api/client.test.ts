@@ -1,6 +1,6 @@
 import { expect, mock, test } from "bun:test";
 
-import { Client, type Fetcher } from "./client";
+import { ApiResponseError, Client, type Fetcher } from "./client";
 
 type ExpectedBody = { value: string };
 
@@ -28,7 +28,7 @@ test("rejects a non-OK response", () => {
 
   expect(
     client.requestJson("/resource", { isValid: isExpectedBody }),
-  ).rejects.toThrow("Request failed");
+  ).rejects.toBeInstanceOf(ApiResponseError);
 });
 
 test("rejects malformed JSON", () => {

@@ -20,7 +20,7 @@ docker compose up --build -d --wait
 ```
 
 Open [the workspace](http://localhost:8080) and
-[RabbitMQ management](http://localhost:15672). The example broker login is
+[RabbitMQ management](http://localhost:15672). The example broker sign-in is
 `commandix` / `local_broker_password`; these credentials are for local development.
 The API is reached through the frontend origin at `/api/`:
 
@@ -124,20 +124,35 @@ Emails use standard email validation after canonicalization. Passwords are kept
 exactly as entered, must contain 12–128 Unicode code points, and cannot be only
 whitespace. Duplicate canonical slugs return `409`; malformed input returns `400`.
 
-Log in with the same three fields to receive a 15-minute access token:
+Sign in with the same three fields to receive a 15-minute access token and a
+host-only, HttpOnly Refresh cookie:
 
 ```sh
-token=$(curl -s http://localhost:8080/api/auth/login \
+token=$(curl -s -c cookies.txt -b cookies.txt http://localhost:8080/api/auth/sign-in \
   -H 'content-type: application/json' \
   --data '{"slug":"acme-north","email":"admin@example.com","password":"correct horse battery staple"}' \
   | bun -e 'console.log((await Bun.stdin.json()).accessToken)')
 curl -i http://localhost:8080/api/auth/identity -H "authorization: Bearer $token"
+curl -i -c cookies.txt -b cookies.txt -X POST http://localhost:8080/api/auth/refresh
+curl -i -c cookies.txt -b cookies.txt -X DELETE http://localhost:8080/api/auth/sign-out
 ```
 
 All unknown-tenant, unknown-email, and wrong-password attempts return the same
-`401` response. Browser access tokens remain in React memory only; expiry returns
-the user to login. Refresh tokens and logout belong to ticket 04. `JWT_SECRET`
-must be at least 32 characters and is required by the API runtime.
+`401` response. Access tokens expire after 15 minutes and remain in browser memory
+only. Each sign-in creates an independent Refresh session with a fixed seven-day
+deadline. Refresh credentials rotate after use; verified reuse revokes that whole
+session and its descendants without affecting another sign-in. Sign-out revokes
+the identifiable Refresh session and clears its cookie while already-issued access
+tokens expire naturally.
+
+The cookie is `HttpOnly`, `SameSite=Strict`, host-only, and scoped to `/api/auth`.
+`AUTH_ALLOWED_ORIGINS` lists exact browser origins allowed to call sign-in, refresh,
+and sign-out; requests without Origin remain usable by command-line clients.
+`AUTH_COOKIE_SECURE=false` supports documented HTTP development. Set it to `true`
+with an explicit HTTPS origin for deployment. Expired Refresh-session rows are
+retained in this slice; bounded cleanup is future work. Never record live access
+tokens, Refresh credentials, cookies, hashes, or cookie-jar files in logs or Git.
+`JWT_SECRET` must contain at least 32 characters.
 
 ## Develop and verify
 
