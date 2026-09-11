@@ -5,7 +5,7 @@ import {
   type ActivationOutboxRepository,
   type ContractEventPublisher,
   type OutboxEvent,
-} from "../src/outbox/publish-contract-activated-event";
+} from "./publish-contract-activated-event";
 
 const EVENT: OutboxEvent = {
   eventId: "0d087f87-0177-41ce-a705-ffb33d160fb8",
@@ -22,6 +22,7 @@ const EVENT: OutboxEvent = {
 test("reserves, confirms, and marks an Outbox event published", async () => {
   const calls: unknown[] = [];
   const repository: ActivationOutboxRepository = {
+    findDue: async () => [],
     reserveAttempt: async (eventId, attempt) => {
       calls.push({ eventId, attempt });
     },
@@ -62,6 +63,7 @@ test("reserves, confirms, and marks an Outbox event published", async () => {
 test("records a safe failure and leaves publication pending", async () => {
   const failures: unknown[] = [];
   const repository: ActivationOutboxRepository = {
+    findDue: async () => [],
     reserveAttempt: async () => {},
     recordFailure: async (eventId, reason) => {
       failures.push({ eventId, reason });
@@ -89,6 +91,7 @@ test("records a safe failure and leaves publication pending", async () => {
 test("keeps a confirmed event retryable when marking is interrupted", async () => {
   let marked = false;
   const repository: ActivationOutboxRepository = {
+    findDue: async () => [],
     reserveAttempt: async () => {},
     recordFailure: async () => {},
     markPublished: async () => {

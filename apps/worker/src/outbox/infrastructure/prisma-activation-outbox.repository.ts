@@ -1,11 +1,11 @@
-import type { OutboxFailureReason } from "@commandix/database";
 import { Injectable } from "@nestjs/common";
-import { DatabaseService } from "../database";
+import { DatabaseService } from "@/database";
+import type { OutboxFailureReason } from "@/outbox/domain/activation-outbox-event";
 import type {
   ActivationOutboxRepository,
   AttemptReservation,
   OutboxEvent,
-} from "./publish-contract-activated-event";
+} from "@/outbox/application/publish-contract-activated-event/publish-contract-activated-event";
 
 @Injectable()
 export class PrismaActivationOutboxRepository implements ActivationOutboxRepository {

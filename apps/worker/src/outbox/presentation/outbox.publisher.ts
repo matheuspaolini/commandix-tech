@@ -3,11 +3,11 @@ import {
   OnApplicationBootstrap,
   OnApplicationShutdown,
 } from "@nestjs/common";
-import { PrismaActivationOutboxRepository } from "./prisma-activation-outbox.repository";
 import {
+  type ActivationOutboxRepository,
   type ContractEventPublisher,
   PublishContractActivatedEvent,
-} from "./publish-contract-activated-event";
+} from "@/outbox/application/publish-contract-activated-event/publish-contract-activated-event";
 
 const BATCH_SIZE = 25;
 const POLL_MS = 250;
@@ -23,7 +23,7 @@ export class OutboxPublisher
   private wake?: () => void;
 
   constructor(
-    private readonly repository: PrismaActivationOutboxRepository,
+    private readonly repository: ActivationOutboxRepository,
     private readonly useCase: PublishContractActivatedEvent,
     private readonly publisher: ContractEventPublisher,
   ) {}

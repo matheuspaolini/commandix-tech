@@ -12,7 +12,7 @@ import {
 import type {
   ContractEventPublisher,
   OutboxEvent,
-} from "./publish-contract-activated-event";
+} from "@/outbox/application/publish-contract-activated-event/publish-contract-activated-event";
 
 export class RabbitMqContractEventPublisher implements ContractEventPublisher {
   private connection?: ChannelModel;

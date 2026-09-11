@@ -1,13 +1,15 @@
 import { Module } from "@nestjs/common";
-import { DatabaseModule } from "../database";
-import { WorkerRuntimeConfig } from "../runtime-config";
-import { OutboxPublisher } from "./outbox.publisher";
-import { PrismaActivationOutboxRepository } from "./prisma-activation-outbox.repository";
+import { DatabaseModule } from "@/database";
+import { WorkerRuntimeConfig } from "@/runtime-config";
+import { OutboxPublisher } from "@/outbox/presentation/outbox.publisher";
+import { PrismaActivationOutboxRepository } from "@/outbox/infrastructure/prisma-activation-outbox.repository";
 import {
+  ACTIVATION_OUTBOX_REPOSITORY,
   PublishContractActivatedEvent,
+  type ActivationOutboxRepository,
   type ContractEventPublisher,
-} from "./publish-contract-activated-event";
-import { RabbitMqContractEventPublisher } from "./rabbitmq-contract-event.publisher";
+} from "@/outbox/application/publish-contract-activated-event/publish-contract-activated-event";
+import { RabbitMqContractEventPublisher } from "@/outbox/infrastructure/rabbitmq-contract-event.publisher";
 
 const CONTRACT_EVENT_PUBLISHER = Symbol("CONTRACT_EVENT_PUBLISHER");
 
@@ -15,6 +17,10 @@ const CONTRACT_EVENT_PUBLISHER = Symbol("CONTRACT_EVENT_PUBLISHER");
   imports: [DatabaseModule],
   providers: [
     PrismaActivationOutboxRepository,
+    {
+      provide: ACTIVATION_OUTBOX_REPOSITORY,
+      useExisting: PrismaActivationOutboxRepository,
+    },
     {
       provide: CONTRACT_EVENT_PUBLISHER,
       inject: [WorkerRuntimeConfig],
@@ -27,21 +33,21 @@ const CONTRACT_EVENT_PUBLISHER = Symbol("CONTRACT_EVENT_PUBLISHER");
     },
     {
       provide: PublishContractActivatedEvent,
-      inject: [PrismaActivationOutboxRepository, CONTRACT_EVENT_PUBLISHER],
+      inject: [ACTIVATION_OUTBOX_REPOSITORY, CONTRACT_EVENT_PUBLISHER],
       useFactory: (
-        repository: PrismaActivationOutboxRepository,
+        repository: ActivationOutboxRepository,
         publisher: ContractEventPublisher,
       ) => new PublishContractActivatedEvent(repository, publisher),
     },
     {
       provide: OutboxPublisher,
       inject: [
-        PrismaActivationOutboxRepository,
+        ACTIVATION_OUTBOX_REPOSITORY,
         PublishContractActivatedEvent,
         CONTRACT_EVENT_PUBLISHER,
       ],
       useFactory: (
-        repository: PrismaActivationOutboxRepository,
+        repository: ActivationOutboxRepository,
         useCase: PublishContractActivatedEvent,
         publisher: ContractEventPublisher,
       ) => new OutboxPublisher(repository, useCase, publisher),

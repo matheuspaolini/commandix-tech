@@ -1,5 +1,9 @@
 import type { ContractActivatedEventV1 } from "@commandix/contract-events";
-import type { OutboxFailureReason } from "@commandix/database";
+import {
+  ActivationOutboxEvent,
+  retryDelayMs,
+  type OutboxFailureReason,
+} from "@/outbox/domain/activation-outbox-event";
 
 export type OutboxEvent = Omit<ContractActivatedEventV1, "occurredAt"> & {
   occurredAt: Date;
@@ -13,10 +17,15 @@ export type AttemptReservation = {
 };
 
 export interface ActivationOutboxRepository {
+  findDue(now: Date, limit: number): Promise<OutboxEvent[]>;
   reserveAttempt(eventId: string, attempt: AttemptReservation): Promise<void>;
   recordFailure(eventId: string, reason: OutboxFailureReason): Promise<void>;
   markPublished(eventId: string, publishedAt: Date): Promise<void>;
 }
+
+export const ACTIVATION_OUTBOX_REPOSITORY = Symbol(
+  "ACTIVATION_OUTBOX_REPOSITORY",
+);
 
 export interface ContractEventPublisher {
   publish(event: OutboxEvent): Promise<void>;
@@ -47,14 +56,11 @@ export class PublishContractActivatedEvent {
 
   async execute(event: OutboxEvent): Promise<PublicationResult> {
     const attemptedAt = this.clock.now();
-    const attemptCount = event.attemptCount + 1;
-    await this.outbox.reserveAttempt(event.eventId, {
-      attemptCount,
-      attemptedAt,
-      nextAttemptAt: new Date(
-        attemptedAt.valueOf() + retryDelayMs(attemptCount),
-      ),
-    });
+    const attempt = ActivationOutboxEvent.reconstitute({
+      event,
+      attemptCount: event.attemptCount,
+    }).nextAttempt(attemptedAt);
+    await this.outbox.reserveAttempt(event.eventId, attempt);
 
     try {
       await this.publisher.publish(event);
@@ -70,9 +76,7 @@ export class PublishContractActivatedEvent {
   }
 }
 
-export function retryDelayMs(attemptCount: number): number {
-  return [250, 500, 1_000, 2_000][attemptCount - 1] ?? 5_000;
-}
+export { retryDelayMs } from "@/outbox/domain/activation-outbox-event";
 
 function publicationFailureReason(
   error: unknown,
