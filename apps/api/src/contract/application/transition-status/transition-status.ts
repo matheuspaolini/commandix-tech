@@ -7,7 +7,7 @@ import type {
   ActivationTransactions,
   ClosureTransaction,
   ClosureTransactions,
-  LockedStatusTransitionContract,
+  LockedStatusTransitionReader,
 } from "@/contract/application/transition-status/status-transition-transaction";
 import type { ContractSnapshot } from "@/contract/domain/contract-snapshot";
 import {
@@ -151,7 +151,7 @@ export class TransitionStatus {
   }
 
   private async transition(
-    transaction: Pick<ActivationTransaction, "findForUpdate">,
+    transaction: LockedStatusTransitionReader,
     command: TransitionStatusCommand,
   ) {
     const current = await transaction.findForUpdate(command);

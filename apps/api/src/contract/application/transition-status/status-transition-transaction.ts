@@ -28,12 +28,12 @@ type HistoryPersistence<Action extends "ACTIVATED" | "CLOSED"> = {
   after: ContractSnapshot;
 };
 
-type LockedContractReader = {
+export interface LockedStatusTransitionReader {
   findForUpdate(input: {
     tenantId: string;
     contractId: string;
   }): Promise<LockedStatusTransitionContract | null>;
-};
+}
 
 export type ActivationPersistence = {
   contract: {
@@ -66,11 +66,11 @@ export type ClosurePersistence = {
   history: HistoryPersistence<"CLOSED">;
 };
 
-export interface ActivationTransaction extends LockedContractReader {
+export interface ActivationTransaction extends LockedStatusTransitionReader {
   persistActivation(input: ActivationPersistence): Promise<void>;
 }
 
-export interface ClosureTransaction extends LockedContractReader {
+export interface ClosureTransaction extends LockedStatusTransitionReader {
   persistClosure(input: ClosurePersistence): Promise<void>;
 }
 
