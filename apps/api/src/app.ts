@@ -10,25 +10,25 @@ import {
 } from "@nestjs/common";
 import { NestFactory } from "@nestjs/core";
 
-import { AuthModule } from "./auth/auth.module";
-import { ContractModule } from "./contract/contract.module";
-import { DatabaseModule } from "./database";
-import { SanitizedErrors } from "./errors";
-import { HealthController, HealthService } from "./health";
+import { AuthModule } from "@/auth/auth.module";
+import { ContractModule } from "@/contract/contract.module";
+import { DatabaseModule } from "@/database";
+import { SanitizedErrors } from "@/errors";
+import { HealthController, HealthService } from "@/health";
 import {
   BROKER_HEALTH_PROBE,
   DATABASE_HEALTH_PROBE,
   HealthProbeRunner,
   PostgreSqlHealthProbe,
   RabbitMqHealthProbe,
-} from "./health-probes";
-import { HttpRequestLogger, type LogWriter } from "./http";
+} from "@/health-probes";
+import { HttpRequestLogger, type LogWriter } from "@/http";
 import {
   RuntimeConfig,
   RuntimeConfigModule,
   runtimeConfigFromEnvironment,
-} from "./runtime-config";
-import { TenantModule } from "./tenant/tenant.module";
+} from "@/runtime-config";
+import { TenantModule } from "@/tenant/tenant.module";
 
 export function createApiModule(config: RuntimeConfig): DynamicModule {
   @Module({
