@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   ContractActivatedEventValidationError,
   parseContractActivatedEvent,
-} from "../src/notification/contract-activated-event";
+} from "@commandix/contract-events";
 
 const VALID_EVENT = {
   eventId: "0d087f87-0177-41ce-a705-ffb33d160fb8",

@@ -3,7 +3,7 @@ import {
   isUuid,
   parseContractActivatedEvent,
   type ValidatedContractActivatedEvent,
-} from "./contract-activated-event";
+} from "@commandix/contract-events";
 
 export type ProcessingOutcome = "created" | "duplicate";
 export type FailureReason =

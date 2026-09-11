@@ -4,7 +4,7 @@ import {
   CONTRACT_EVENTS_EXCHANGE,
   parseContractActivatedEvent,
   toContractActivatedEnvelope,
-} from "./notification/contract-activated-event";
+} from "@commandix/contract-events";
 import { workerRuntimeConfigFromEnvironment } from "./runtime-config";
 
 const CONFIRM_TIMEOUT_MS = 5_000;

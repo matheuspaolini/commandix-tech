@@ -1,7 +1,7 @@
 import { Prisma } from "@commandix/database";
 import { Injectable } from "@nestjs/common";
 import { DatabaseService } from "../database";
-import type { ValidatedContractActivatedEvent } from "./contract-activated-event";
+import type { ValidatedContractActivatedEvent } from "@commandix/contract-events";
 import {
   ActivationRevisionInvalidError,
   ContractReferenceInvalidError,

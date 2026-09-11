@@ -5,7 +5,7 @@ import {
   CONTRACT_ACTIVATED_QUEUE,
   CONTRACT_EVENTS_EXCHANGE,
   NOTIFICATION_DEAD_LETTER_EXCHANGE,
-} from "./contract-activated-event";
+} from "@commandix/contract-events";
 
 export class RabbitMqTopology {
   constructor(private readonly rabbitMqUrl: string) {}

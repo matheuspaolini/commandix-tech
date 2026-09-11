@@ -1,6 +1,6 @@
 import { Controller } from "@nestjs/common";
 import { Ctx, EventPattern, Payload, RmqContext } from "@nestjs/microservices";
-import { CONTRACT_ACTIVATED_PATTERN } from "./contract-activated-event";
+import { CONTRACT_ACTIVATED_PATTERN } from "@commandix/contract-events";
 import {
   NotificationProcessingError,
   ProcessContractActivatedEvent,

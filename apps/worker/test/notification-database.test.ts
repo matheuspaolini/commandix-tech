@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createPrismaClient } from "@commandix/database";
 import type { DatabaseService } from "../src/database";
-import { parseContractActivatedEvent } from "../src/notification/contract-activated-event";
+import { parseContractActivatedEvent } from "@commandix/contract-events";
 import { PrismaActivationNotificationRepository } from "../src/notification/prisma-activation-notification.repository";
 import {
   ActivationRevisionInvalidError,
