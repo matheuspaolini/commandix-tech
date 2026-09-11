@@ -48,6 +48,41 @@ test("reconstituted Contract only advances through its lifecycle", () => {
   });
 });
 
+test("Contract enforces the complete lifecycle matrix", () => {
+  const statuses = ["DRAFT", "ACTIVE", "CLOSED"] as const;
+  const observed = statuses.flatMap((status) =>
+    statuses.map((target) => {
+      const contract = ContractEntity.reconstitute({
+        id: ContractIdentifier.from("contract-id"),
+        tenantId: TenantIdentifier.from("tenant-id"),
+        templateVersionId: TemplateVersionIdentifier.from(
+          "template-version-id",
+        ),
+        status,
+        revision: 1,
+        values: {},
+      });
+      try {
+        return `${status}:${target}:${contract.transitionTo(target).status}`;
+      } catch (error) {
+        return `${status}:${target}:${error instanceof ContractStatusConflict ? "CONFLICT" : "ERROR"}`;
+      }
+    }),
+  );
+
+  expect(observed).toStrictEqual([
+    "DRAFT:DRAFT:CONFLICT",
+    "DRAFT:ACTIVE:ACTIVE",
+    "DRAFT:CLOSED:CONFLICT",
+    "ACTIVE:DRAFT:CONFLICT",
+    "ACTIVE:ACTIVE:CONFLICT",
+    "ACTIVE:CLOSED:CLOSED",
+    "CLOSED:DRAFT:CONFLICT",
+    "CLOSED:ACTIVE:CONFLICT",
+    "CLOSED:CLOSED:CONFLICT",
+  ]);
+});
+
 test("Draft Contract migration replaces its version and values", () => {
   const contract = ContractEntity.reconstitute({
     id: ContractIdentifier.from("contract-id"),

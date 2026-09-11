@@ -3,7 +3,8 @@ import {
   decodeContractRegisterCursor,
   encodeContractRegisterCursor,
   InvalidContractPagination,
-} from "@/modules/contract/application/list-contracts/contract-register-cursor";
+  parseContractRegisterQuery,
+} from "./contract-register-pagination";
 
 const boundary = {
   createdAt: new Date("2026-09-11T12:30:00.000Z"),
@@ -13,6 +14,26 @@ const boundary = {
 test("round-trips a canonical opaque register boundary", () => {
   const cursor = encodeContractRegisterCursor(boundary);
   expect(decodeContractRegisterCursor(cursor)).toEqual(boundary);
+});
+
+test("parses only documented Contract register parameters", () => {
+  const cursor = encodeContractRegisterCursor(boundary);
+  expect({
+    defaults: parseContractRegisterQuery({}),
+    maximum: parseContractRegisterQuery({ limit: "100", after: cursor }),
+    invalid: ["", "0", "1.5", "101"].map((limit) => {
+      try {
+        parseContractRegisterQuery({ limit });
+        return false;
+      } catch (error) {
+        return error instanceof InvalidContractPagination;
+      }
+    }),
+  }).toEqual({
+    defaults: { limit: 20, after: null },
+    maximum: { limit: 100, after: boundary },
+    invalid: [true, true, true, true],
+  });
 });
 
 describe("invalid Contract register cursors", () => {

@@ -21,7 +21,7 @@ class HeaderIdentityGuard implements CanActivate {
     const role = request.headers["x-test-role"];
     if (role === "ADMIN" || role === "MEMBER") {
       request.identity = {
-        sub: "user-id",
+        userId: "user-id",
         tenantId: "tenant-id",
         role,
         iat: 1,

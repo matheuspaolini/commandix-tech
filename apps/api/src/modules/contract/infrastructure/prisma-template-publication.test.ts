@@ -57,7 +57,12 @@ function publicationService() {
   const transactions = new PrismaTemplatePublicationTransactions({
     client,
   } as DatabaseService);
-  return { transactions, service: new PutActiveTemplate(transactions) };
+  return {
+    transactions,
+    service: new PutActiveTemplate(transactions, {
+      next: () => crypto.randomUUID(),
+    }),
+  };
 }
 
 async function removePublishedTenant(tenantId: string) {

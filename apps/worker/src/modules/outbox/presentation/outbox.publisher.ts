@@ -3,11 +3,7 @@ import {
   OnApplicationBootstrap,
   OnApplicationShutdown,
 } from "@nestjs/common";
-import {
-  type ActivationOutboxRepository,
-  type ContractEventPublisher,
-  PublishContractActivatedEvent,
-} from "@/modules/outbox/application/publish-contract-activated-event/publish-contract-activated-event";
+import { PublishContractActivatedEvent } from "@/modules/outbox/application/publish-contract-activated-event/publish-contract-activated-event";
 
 const BATCH_SIZE = 25;
 const POLL_MS = 250;
@@ -22,11 +18,7 @@ export class OutboxPublisher
   private loop?: Promise<void>;
   private wake?: () => void;
 
-  constructor(
-    private readonly repository: ActivationOutboxRepository,
-    private readonly useCase: PublishContractActivatedEvent,
-    private readonly publisher: ContractEventPublisher,
-  ) {}
+  constructor(private readonly useCase: PublishContractActivatedEvent) {}
 
   onApplicationBootstrap(): void {
     this.running = true;
@@ -46,24 +38,10 @@ export class OutboxPublisher
   private async run(): Promise<void> {
     while (this.running) {
       try {
-        const events = await this.repository.findDue(new Date(), BATCH_SIZE);
-        for (const event of events) {
+        const results = await this.useCase.execute({ limit: BATCH_SIZE });
+        for (const { event, outcome } of results) {
           if (!this.running) break;
-          try {
-            const result = await this.useCase.execute(event);
-            console.log(
-              JSON.stringify({
-                event:
-                  result === "published"
-                    ? "outbox_event_published"
-                    : "outbox_event_retry_scheduled",
-                eventId: event.eventId,
-                correlationId: event.correlationId,
-                tenantId: event.tenantId,
-                contractId: event.contractId,
-              }),
-            );
-          } catch {
+          if (outcome === "unexpected_failure") {
             console.error(
               JSON.stringify({
                 event: "outbox_event_mark_failed",
@@ -71,9 +49,22 @@ export class OutboxPublisher
                 correlationId: event.correlationId,
               }),
             );
+            continue;
           }
+          console.log(
+            JSON.stringify({
+              event:
+                outcome === "published"
+                  ? "outbox_event_published"
+                  : "outbox_event_retry_scheduled",
+              eventId: event.eventId,
+              correlationId: event.correlationId,
+              tenantId: event.tenantId,
+              contractId: event.contractId,
+            }),
+          );
         }
-        if (events.length < BATCH_SIZE) await this.wait(POLL_MS);
+        if (results.length < BATCH_SIZE) await this.wait(POLL_MS);
       } catch {
         console.error(JSON.stringify({ event: "outbox_poll_failed" }));
         await this.wait(FAILURE_WAIT_MS);

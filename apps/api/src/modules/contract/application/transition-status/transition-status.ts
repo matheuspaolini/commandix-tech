@@ -5,6 +5,7 @@ import type {
   ClosureTransactions,
   LockedStatusTransitionReader,
 } from "@/modules/contract/application/transition-status/status-transition-transaction";
+import type { ContractTemplateVersion } from "@/modules/contract/application/contract-template-version";
 import {
   CONTRACT_ACTIVATION_EVENT_TYPE,
   CONTRACT_ACTIVATION_SCHEMA_VERSION,
@@ -20,39 +21,18 @@ import {
   TemplateVersionIdentifier,
   TenantIdentifier,
 } from "@/modules/contract/domain/entities";
+import type { ContractStatus } from "@/modules/contract/domain/entities";
 import {
   ContractNotFound,
   ContractRevisionConflict,
   ContractStatusConflict,
 } from "@/modules/contract/domain/contract-errors";
-import type {
-  ContractDetail,
-  ContractStatus,
-} from "@/modules/contract/application/read-contract-detail/read-contract-detail";
 
 export {
   ContractNotFound,
   ContractRevisionConflict,
   ContractStatusConflict,
 } from "@/modules/contract/domain/contract-errors";
-
-export class ContractLifecycle {
-  constructor(readonly status: ContractStatus) {}
-
-  transitionTo(target: ContractStatus): TransitionTarget {
-    const transitioned = ContractEntity.reconstitute({
-      id: ContractIdentifier.from("lifecycle"),
-      tenantId: TenantIdentifier.from("lifecycle"),
-      templateVersionId: TemplateVersionIdentifier.from("lifecycle"),
-      status: this.status,
-      revision: 1,
-      values: {},
-    }).transitionTo(target).status;
-    if (transitioned !== "ACTIVE" && transitioned !== "CLOSED")
-      throw new Error("Contract transition produced an invalid target");
-    return transitioned;
-  }
-}
 
 export type TransitionTarget = "ACTIVE" | "CLOSED";
 
@@ -68,8 +48,16 @@ export type TransitionStatusCommand = TransitionCommandContext &
   ({ targetStatus: "ACTIVE" } | { targetStatus: "CLOSED" });
 
 export type TransitionStatusResult =
-  | { targetStatus: "ACTIVE"; contract: ContractDetail; eventId: string }
-  | { targetStatus: "CLOSED"; contract: ContractDetail };
+  | { targetStatus: "ACTIVE"; contract: TransitionedContract; eventId: string }
+  | { targetStatus: "CLOSED"; contract: TransitionedContract };
+
+export type TransitionedContract = {
+  id: string;
+  status: ContractStatus;
+  revision: number;
+  values: ContractSnapshot["values"];
+  templateVersion: ContractTemplateVersion;
+};
 
 export interface TransitionClock {
   now(): Date;
@@ -79,15 +67,12 @@ export interface TransitionIdGenerator {
   next(): string;
 }
 
-const SYSTEM_CLOCK: TransitionClock = { now: () => new Date() };
-const UUIDS: TransitionIdGenerator = { next: () => crypto.randomUUID() };
-
 export class TransitionStatus {
   constructor(
     private readonly activations: ActivationTransactions,
     private readonly closures: ClosureTransactions,
-    private readonly clock: TransitionClock = SYSTEM_CLOCK,
-    private readonly ids: TransitionIdGenerator = UUIDS,
+    private readonly clock: TransitionClock,
+    private readonly ids: TransitionIdGenerator,
   ) {}
 
   execute(command: TransitionStatusCommand): Promise<TransitionStatusResult> {
@@ -191,7 +176,7 @@ export class TransitionStatus {
         revision,
         values: current.values,
         templateVersion: current.templateVersion,
-      } satisfies ContractDetail,
+      } satisfies TransitionedContract,
       history: {
         ...HistoryEntity.create({
           id: HistoryIdentifier.from(this.ids.next()),

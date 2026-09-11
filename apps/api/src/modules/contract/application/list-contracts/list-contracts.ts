@@ -1,9 +1,3 @@
-import {
-  decodeContractRegisterCursor,
-  encodeContractRegisterCursor,
-  InvalidContractPagination,
-  type ContractRegisterBoundary,
-} from "@/modules/contract/application/list-contracts/contract-register-cursor";
 import type { ContractStatus } from "@/modules/contract/application/read-contract-detail/read-contract-detail";
 
 export const CONTRACT_REGISTER_DEFAULT_LIMIT = 20;
@@ -13,16 +7,14 @@ export type ContractRegisterItem = {
   id: string;
   status: ContractStatus;
   revision: number;
-  createdAt: string;
-};
-
-export type ContractRegisterRecord = Omit<ContractRegisterItem, "createdAt"> & {
   createdAt: Date;
 };
 
+export type ContractRegisterBoundary = { createdAt: Date; id: string };
+
 export type ContractRegisterPage = {
   items: ContractRegisterItem[];
-  nextCursor: string | null;
+  next: ContractRegisterBoundary | null;
 };
 
 export interface ContractRegisterRepository {
@@ -30,73 +22,37 @@ export interface ContractRegisterRepository {
     tenantId: string;
     limit: number;
     after: ContractRegisterBoundary | null;
-  }): Promise<{ items: ContractRegisterRecord[]; hasMore: boolean }>;
+  }): Promise<{ items: ContractRegisterItem[]; hasMore: boolean }>;
 }
+
+export type ListContractsInput = {
+  tenantId: string;
+  limit: number;
+  after: ContractRegisterBoundary | null;
+};
 
 export class ListContracts {
   constructor(private readonly contracts: ContractRegisterRepository) {}
 
-  async execute(query: {
-    tenantId: string;
-    limit?: number;
-    after?: string;
-  }): Promise<ContractRegisterPage> {
-    const limit = query.limit ?? CONTRACT_REGISTER_DEFAULT_LIMIT;
-    const after = decodeContractRegisterCursor(query.after);
+  async execute(input: ListContractsInput): Promise<ContractRegisterPage> {
     const page = await this.contracts.findPage({
-      tenantId: query.tenantId,
-      limit,
-      after,
+      tenantId: input.tenantId,
+      limit: input.limit,
+      after: input.after,
     });
     const last = page.items.at(-1);
 
     return {
-      items: page.items.map((contract) => ({
-        ...contract,
-        createdAt: contract.createdAt.toISOString(),
-      })),
-      nextCursor:
+      items: page.items,
+      next:
         page.hasMore && last
-          ? encodeContractRegisterCursor({
+          ? {
               createdAt: last.createdAt,
               id: last.id,
-            })
+            }
           : null,
     };
   }
-}
-
-export function parseContractRegisterQuery(query: Record<string, unknown>): {
-  limit: number;
-  after?: string;
-} {
-  if (Object.keys(query).some((key) => key !== "limit" && key !== "after"))
-    throw new InvalidContractPagination();
-
-  const limitValue = query.limit;
-  const afterValue = query.after;
-  if (
-    limitValue !== undefined &&
-    (typeof limitValue !== "string" || !/^[1-9]\d*$/.test(limitValue))
-  )
-    throw new InvalidContractPagination();
-  if (
-    afterValue !== undefined &&
-    (typeof afterValue !== "string" || afterValue.length === 0)
-  )
-    throw new InvalidContractPagination();
-
-  const limit =
-    limitValue === undefined
-      ? CONTRACT_REGISTER_DEFAULT_LIMIT
-      : Number(limitValue);
-  if (!Number.isSafeInteger(limit) || limit > CONTRACT_REGISTER_MAX_LIMIT)
-    throw new InvalidContractPagination();
-
-  return {
-    limit,
-    ...(typeof afterValue === "string" ? { after: afterValue } : {}),
-  };
 }
 
 export const CONTRACT_REGISTER_REPOSITORY = Symbol(

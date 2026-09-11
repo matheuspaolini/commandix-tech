@@ -1,5 +1,5 @@
-import type { AccessTokenSubject } from "@/modules/auth/domain/access-token";
-import type { PresentedRefreshCredential } from "@/modules/auth/domain/refresh-credential";
+import type { AuthenticatedIdentity } from "@/modules/auth/domain/authenticated-identity";
+import type { PresentedRefreshCredential } from "@/modules/auth/application/token-codecs";
 
 export type NewStoredRefreshCredential = PresentedRefreshCredential;
 
@@ -23,7 +23,7 @@ export type RotateRefreshSession = {
 export type RotationResult =
   | {
       outcome: "rotated";
-      subject: AccessTokenSubject;
+      subject: AuthenticatedIdentity;
       expiresAt: Date;
       sessionId: string;
     }

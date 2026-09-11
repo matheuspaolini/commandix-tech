@@ -1,21 +1,27 @@
 import {
   CanActivate,
   ExecutionContext,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from "@nestjs/common";
 import type { Request } from "express";
 
 import {
-  AccessTokenService,
-  type AccessTokenClaims,
-} from "@/modules/auth/domain/access-token";
+  ACCESS_TOKEN_CODEC,
+  type AccessTokenCodec,
+} from "@/modules/auth/application/token-codecs";
+import type { AuthenticatedIdentity } from "@/modules/auth/domain/authenticated-identity";
 
-export type AuthenticatedRequest = Request & { identity?: AccessTokenClaims };
+export type AuthenticatedRequest = Request & {
+  identity?: AuthenticatedIdentity;
+};
 
 @Injectable()
 export class AccessTokenGuard implements CanActivate {
-  constructor(private readonly tokens: AccessTokenService) {}
+  constructor(
+    @Inject(ACCESS_TOKEN_CODEC) private readonly tokens: AccessTokenCodec,
+  ) {}
 
   canActivate(context: ExecutionContext) {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();

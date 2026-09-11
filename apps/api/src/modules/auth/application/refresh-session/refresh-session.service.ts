@@ -1,18 +1,14 @@
-import type { AccessTokenSubject, Clock } from "@/modules/auth/domain/access-token";
-import { AccessTokenService } from "@/modules/auth/domain/access-token";
 import { AuthenticationFailed } from "@/modules/auth/domain/errors";
-import {
-  createRefreshCredential,
-  parseRefreshCredential,
-} from "@/modules/auth/domain/refresh-credential";
+import type { AuthenticatedIdentity } from "@/modules/auth/domain/authenticated-identity";
+import type {
+  AccessTokenCodec,
+  RefreshCredentialCodec,
+} from "@/modules/auth/application/token-codecs";
 import type { RefreshSessionRepository } from "./refresh-session.repository";
 import type { AuthLifecycleWriter } from "./auth-lifecycle-writer";
 
 const REFRESH_SESSION_SECONDS = 7 * 24 * 60 * 60;
-
-const SYSTEM_CLOCK: Clock = {
-  nowInSeconds: () => Math.floor(Date.now() / 1_000),
-};
+export type Clock = { nowInSeconds(): number };
 
 export type IssuedSession = {
   accessToken: string;
@@ -23,17 +19,18 @@ export type IssuedSession = {
 export class RefreshSessionService {
   constructor(
     private readonly sessions: RefreshSessionRepository,
-    private readonly accessTokens: AccessTokenService,
+    private readonly accessTokens: AccessTokenCodec,
+    private readonly refreshCredentials: RefreshCredentialCodec,
     private readonly logger: AuthLifecycleWriter,
-    private readonly clock: Clock = SYSTEM_CLOCK,
+    private readonly clock: Clock,
   ) {}
 
-  async create(subject: AccessTokenSubject): Promise<IssuedSession> {
+  async create(subject: AuthenticatedIdentity): Promise<IssuedSession> {
     const now = this.now();
     const expiresAt = new Date(
       (this.clock.nowInSeconds() + REFRESH_SESSION_SECONDS) * 1_000,
     );
-    const credential = createRefreshCredential();
+    const credential = this.refreshCredentials.issue();
     const created = await this.sessions.create({
       userId: subject.userId,
       createdAt: now,
@@ -53,10 +50,10 @@ export class RefreshSessionService {
   }
 
   async rotate(value: string | undefined): Promise<IssuedSession> {
-    const presented = parseRefreshCredential(value);
+    const presented = this.refreshCredentials.parse(value);
     if (!presented) throw new AuthenticationFailed();
 
-    const replacement = createRefreshCredential();
+    const replacement = this.refreshCredentials.issue();
     const result = await this.sessions.rotate({
       presented,
       replacement: {
@@ -80,7 +77,7 @@ export class RefreshSessionService {
   }
 
   async revoke(value: string | undefined): Promise<void> {
-    const presented = parseRefreshCredential(value);
+    const presented = this.refreshCredentials.parse(value);
     if (!presented) return;
 
     const result = await this.sessions.revoke({

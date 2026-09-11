@@ -1,11 +1,11 @@
-import type { Role } from "@/modules/tenant/tenant.contract";
+import type { AuthenticatedRole } from "@/modules/auth/domain/authenticated-identity";
 
 export type StoredIdentity = {
   userId: string;
   tenantId: string;
   email: string;
   passwordHash: string;
-  role: Role;
+  role: AuthenticatedRole;
   slug: string;
 };
 

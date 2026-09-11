@@ -51,6 +51,9 @@ import {
 } from "@/modules/contract/application/publish-template/template-publication";
 import { TemplatePublicationLogger } from "@/modules/contract/presentation/template-publication.logger";
 
+const CONTRACT_CLOCK = { now: () => new Date() };
+const CONTRACT_IDS = { next: () => crypto.randomUUID() };
+
 @Module({
   imports: [AuthModule],
   controllers: [TemplateController, ContractController],
@@ -83,12 +86,18 @@ import { TemplatePublicationLogger } from "@/modules/contract/presentation/templ
     {
       provide: TransitionStatus,
       useFactory: (activations, closures) =>
-        new TransitionStatus(activations, closures),
+        new TransitionStatus(
+          activations,
+          closures,
+          CONTRACT_CLOCK,
+          CONTRACT_IDS,
+        ),
       inject: [ACTIVATION_TRANSACTIONS, CLOSURE_TRANSACTIONS],
     },
     {
       provide: EditDraftValues,
-      useFactory: (transactions) => new EditDraftValues(transactions),
+      useFactory: (transactions) =>
+        new EditDraftValues(transactions, CONTRACT_CLOCK, CONTRACT_IDS),
       inject: [DRAFT_EDIT_TRANSACTIONS],
     },
     {
@@ -97,7 +106,8 @@ import { TemplatePublicationLogger } from "@/modules/contract/presentation/templ
     },
     {
       provide: MigrateDraft,
-      useFactory: (transactions) => new MigrateDraft(transactions),
+      useFactory: (transactions) =>
+        new MigrateDraft(transactions, CONTRACT_CLOCK, CONTRACT_IDS),
       inject: [DRAFT_MIGRATION_TRANSACTIONS],
     },
     {
@@ -110,12 +120,14 @@ import { TemplatePublicationLogger } from "@/modules/contract/presentation/templ
     },
     {
       provide: PutActiveTemplate,
-      useFactory: (transactions) => new PutActiveTemplate(transactions),
+      useFactory: (transactions) =>
+        new PutActiveTemplate(transactions, CONTRACT_IDS),
       inject: [TEMPLATE_PUBLICATION_TRANSACTIONS],
     },
     {
       provide: CreateContract,
-      useFactory: (transactions) => new CreateContract(transactions),
+      useFactory: (transactions) =>
+        new CreateContract(transactions, CONTRACT_CLOCK, CONTRACT_IDS),
       inject: [CONTRACT_CREATION_TRANSACTIONS],
     },
     {

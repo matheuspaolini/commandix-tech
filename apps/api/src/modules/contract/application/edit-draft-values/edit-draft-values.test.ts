@@ -143,12 +143,18 @@ test("returns a canonical no-op without persistence or generated audit data", as
 
 test("checks revision and Draft eligibility before resolving values", async () => {
   const active = { ...DRAFT, status: "ACTIVE" as const, revision: 2 };
-  const stale = new EditDraftValues({
-    run: (operation) => operation(transactionFor(active)),
-  });
-  const current = new EditDraftValues({
-    run: (operation) => operation(transactionFor(active)),
-  });
+  const collaborators = [
+    { now: () => new Date(0) },
+    { next: () => "unused-id" },
+  ] as const;
+  const stale = new EditDraftValues(
+    { run: (operation) => operation(transactionFor(active)) },
+    ...collaborators,
+  );
+  const current = new EditDraftValues(
+    { run: (operation) => operation(transactionFor(active)) },
+    ...collaborators,
+  );
 
   const staleError = await stale
     .execute({

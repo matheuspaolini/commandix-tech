@@ -1,12 +1,12 @@
-import type { ContractDetail } from "@/modules/contract/application/read-contract-detail/read-contract-detail";
 import type { ContractSnapshot } from "@/modules/contract/domain/contract-snapshot";
 import type { ContractValues } from "@/modules/contract/domain/contract-values";
 import type { LockedDraftContract } from "@/modules/contract/application/edit-draft-values/draft-edit-transaction";
+import type { ContractTemplateVersion } from "@/modules/contract/application/contract-template-version";
 
 export type LockedDraftMigration = {
   contract: LockedDraftContract;
   activeTemplateVersionId: string | null;
-  targetTemplateVersion: ContractDetail["templateVersion"] | null;
+  targetTemplateVersion: ContractTemplateVersion | null;
 };
 
 export type DraftMigrationPersistence = {

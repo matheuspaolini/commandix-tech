@@ -245,6 +245,8 @@ describe("Contract persistence invariants", () => {
 
     const useCase = new CreateContract(
       new PrismaContractCreationTransactions({ client } as DatabaseService),
+      { now: () => new Date() },
+      { next: () => crypto.randomUUID() },
     );
     let creation!: ReturnType<CreateContract["execute"]>;
     const published = await client.$transaction(async (transaction) => {
@@ -298,6 +300,8 @@ async function ensureHistory() {
   if (existing) return existing;
   const useCase = new CreateContract(
     new PrismaContractCreationTransactions({ client } as DatabaseService),
+    { now: () => new Date() },
+    { next: () => crypto.randomUUID() },
   );
   const created = await useCase.execute({
     tenantId: acmeTenantId,

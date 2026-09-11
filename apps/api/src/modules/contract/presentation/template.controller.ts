@@ -61,13 +61,13 @@ export class TemplateController {
     try {
       const result = await this.putActiveTemplate.execute({
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         expectedRevision: body.expectedRevision,
         definition: body.definition,
       });
       const fields = {
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         logicalTemplateId: result.template.logicalTemplateId,
         templateVersionId: result.template.templateVersionId,
         expectedRevision: body.expectedRevision,
@@ -82,7 +82,7 @@ export class TemplateController {
       if (!reason) throw error;
       this.logger.rejected({
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         expectedRevision: body.expectedRevision,
         reason,
       });

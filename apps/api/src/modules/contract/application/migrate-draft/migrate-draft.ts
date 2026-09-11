@@ -1,5 +1,5 @@
-import type { ContractDetail } from "@/modules/contract/application/read-contract-detail/read-contract-detail";
 import type { DraftMigrationTransactions } from "@/modules/contract/application/migrate-draft/draft-migration-transaction";
+import type { ContractTemplateVersion } from "@/modules/contract/application/contract-template-version";
 import {
   ContractNotFound,
   ContractRevisionConflict,
@@ -11,6 +11,7 @@ import type { ContractSnapshot } from "@/modules/contract/domain/contract-snapsh
 import {
   contractValuesEqual,
   resolveContractValues,
+  type ContractValues,
 } from "@/modules/contract/domain/contract-values";
 import {
   ContractEntity,
@@ -46,17 +47,22 @@ export interface MigrationIdGenerator {
   next(): string;
 }
 
-const SYSTEM_CLOCK: MigrationClock = { now: () => new Date() };
-const UUIDS: MigrationIdGenerator = { next: () => crypto.randomUUID() };
+export type MigratedDraft = {
+  id: string;
+  status: ContractEntity["status"];
+  revision: number;
+  values: ContractValues;
+  templateVersion: ContractTemplateVersion;
+};
 
 export class MigrateDraft {
   constructor(
     private readonly transactions: DraftMigrationTransactions,
-    private readonly clock: MigrationClock = SYSTEM_CLOCK,
-    private readonly ids: MigrationIdGenerator = UUIDS,
+    private readonly clock: MigrationClock,
+    private readonly ids: MigrationIdGenerator,
   ) {}
 
-  execute(command: MigrateDraftCommand): Promise<ContractDetail> {
+  execute(command: MigrateDraftCommand): Promise<MigratedDraft> {
     return this.transactions.run(async (transaction) => {
       const current = await transaction.loadForMigration({
         tenantId: command.tenantId,
@@ -76,7 +82,7 @@ export class MigrateDraft {
         { fields: current.targetTemplateVersion.fields },
         command.suppliedValues,
       );
-      const currentDetail: ContractDetail = {
+      const currentDetail: MigratedDraft = {
         id: current.contract.id,
         status: current.contract.status,
         revision: current.contract.revision,

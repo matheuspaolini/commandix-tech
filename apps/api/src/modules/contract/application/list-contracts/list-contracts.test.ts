@@ -1,11 +1,7 @@
 import { expect, test } from "bun:test";
-import {
-  ListContracts,
-  parseContractRegisterQuery,
-} from "@/modules/contract/application/list-contracts/list-contracts";
-import { InvalidContractPagination } from "@/modules/contract/application/list-contracts/contract-register-cursor";
+import { ListContracts } from "@/modules/contract/application/list-contracts/list-contracts";
 
-test("maps a repository page and creates its continuation cursor", async () => {
+test("returns a projection page and transport-neutral continuation boundary", async () => {
   const requests: unknown[] = [];
   const useCase = new ListContracts({
     findPage: async (input) => {
@@ -24,7 +20,11 @@ test("maps a repository page and creates its continuation cursor", async () => {
     },
   });
 
-  const page = await useCase.execute({ tenantId: "tenant-id" });
+  const page = await useCase.execute({
+    tenantId: "tenant-id",
+    limit: 20,
+    after: null,
+  });
 
   expect({ requests, page }).toEqual({
     requests: [{ tenantId: "tenant-id", limit: 20, after: null }],
@@ -34,29 +34,13 @@ test("maps a repository page and creates its continuation cursor", async () => {
           id: "8c3272ba-5192-4d55-817d-13f041850945",
           status: "DRAFT",
           revision: 1,
-          createdAt: "2026-09-11T12:30:00.000Z",
+          createdAt: new Date("2026-09-11T12:30:00.000Z"),
         },
       ],
-      nextCursor: expect.any(String),
+      next: {
+        id: "8c3272ba-5192-4d55-817d-13f041850945",
+        createdAt: new Date("2026-09-11T12:30:00.000Z"),
+      },
     },
-  });
-});
-
-test("parses only documented Contract register parameters", () => {
-  expect({
-    defaults: parseContractRegisterQuery({}),
-    maximum: parseContractRegisterQuery({ limit: "100", after: "cursor" }),
-    invalid: ["", "0", "1.5", "101"].map((limit) => {
-      try {
-        parseContractRegisterQuery({ limit });
-        return false;
-      } catch (error) {
-        return error instanceof InvalidContractPagination;
-      }
-    }),
-  }).toEqual({
-    defaults: { limit: 20 },
-    maximum: { limit: 100, after: "cursor" },
-    invalid: [true, true, true, true],
   });
 });

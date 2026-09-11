@@ -62,14 +62,11 @@ export type CreatedContract = {
 };
 export class ActiveTemplateRequired extends Error {}
 
-const SYSTEM_CLOCK: ContractClock = { now: () => new Date() };
-const UUIDS: ContractIdGenerator = { next: () => crypto.randomUUID() };
-
 export class CreateContract {
   constructor(
     private readonly transactions: ContractCreationTransactions,
-    private readonly clock: ContractClock = SYSTEM_CLOCK,
-    private readonly ids: ContractIdGenerator = UUIDS,
+    private readonly clock: ContractClock,
+    private readonly ids: ContractIdGenerator,
   ) {}
 
   execute(command: CreateContractCommand): Promise<CreatedContract> {

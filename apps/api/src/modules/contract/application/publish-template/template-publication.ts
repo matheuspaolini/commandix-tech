@@ -58,14 +58,10 @@ export interface TemplatePublicationIdGenerator {
   next(): string;
 }
 
-const UUIDS: TemplatePublicationIdGenerator = {
-  next: () => crypto.randomUUID(),
-};
-
 export class PutActiveTemplate {
   constructor(
     private readonly transactions: TemplatePublicationTransactions,
-    private readonly ids: TemplatePublicationIdGenerator = UUIDS,
+    private readonly ids: TemplatePublicationIdGenerator,
   ) {}
 
   execute(command: PutActiveTemplateCommand): Promise<PutActiveTemplateResult> {

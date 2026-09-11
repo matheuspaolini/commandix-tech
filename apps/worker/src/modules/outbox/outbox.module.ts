@@ -37,20 +37,16 @@ const CONTRACT_EVENT_PUBLISHER = Symbol("CONTRACT_EVENT_PUBLISHER");
       useFactory: (
         repository: ActivationOutboxRepository,
         publisher: ContractEventPublisher,
-      ) => new PublishContractActivatedEvent(repository, publisher),
+      ) =>
+        new PublishContractActivatedEvent(repository, publisher, {
+          now: () => new Date(),
+        }),
     },
     {
       provide: OutboxPublisher,
-      inject: [
-        ACTIVATION_OUTBOX_REPOSITORY,
-        PublishContractActivatedEvent,
-        CONTRACT_EVENT_PUBLISHER,
-      ],
-      useFactory: (
-        repository: ActivationOutboxRepository,
-        useCase: PublishContractActivatedEvent,
-        publisher: ContractEventPublisher,
-      ) => new OutboxPublisher(repository, useCase, publisher),
+      inject: [PublishContractActivatedEvent],
+      useFactory: (useCase: PublishContractActivatedEvent) =>
+        new OutboxPublisher(useCase),
     },
   ],
 })

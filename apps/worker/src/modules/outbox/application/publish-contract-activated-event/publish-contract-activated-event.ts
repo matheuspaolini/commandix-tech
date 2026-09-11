@@ -29,25 +29,40 @@ export interface ContractEventPublisher {
 }
 
 export type DeliveryResult =
-  | { outcome: "published" }
-  | { outcome: "failed"; reason: OutboxFailureReason };
+  { outcome: "published" } | { outcome: "failed"; reason: OutboxFailureReason };
 
 export interface PublisherClock {
   now(): Date;
 }
 
-export type PublicationResult = "published" | "failed";
-
-const SYSTEM_CLOCK: PublisherClock = { now: () => new Date() };
+export type PublicationResult = {
+  event: OutboxEvent;
+  outcome: "published" | "failed" | "unexpected_failure";
+};
 export class PublishContractActivatedEvent {
   constructor(
     private readonly outbox: ActivationOutboxRepository,
     private readonly publisher: ContractEventPublisher,
-    private readonly clock: PublisherClock = SYSTEM_CLOCK,
+    private readonly clock: PublisherClock,
     private readonly afterConfirmation: () => Promise<void> = async () => {},
   ) {}
 
-  async execute(event: OutboxEvent): Promise<PublicationResult> {
+  async execute(input: { limit: number }): Promise<PublicationResult[]> {
+    const events = await this.outbox.findDue(this.clock.now(), input.limit);
+    const results: PublicationResult[] = [];
+    for (const event of events) {
+      try {
+        results.push({ event, outcome: await this.publish(event) });
+      } catch {
+        results.push({ event, outcome: "unexpected_failure" });
+      }
+    }
+    return results;
+  }
+
+  private async publish(
+    event: OutboxEvent,
+  ): Promise<PublicationResult["outcome"]> {
     const attemptedAt = this.clock.now();
     const attempt = ActivationOutboxEvent.reconstitute({
       event,
@@ -55,18 +70,14 @@ export class PublishContractActivatedEvent {
     }).nextAttempt(attemptedAt);
     await this.outbox.reserveAttempt(event.eventId, attempt);
 
-    try {
-      const delivery = await this.publisher.publish(event);
-      if (delivery.outcome === "failed") {
-        await this.outbox.recordFailure(event.eventId, delivery.reason);
-        return "failed";
-      }
-      await this.afterConfirmation();
-      await this.outbox.markPublished(event.eventId, attemptedAt);
-      return "published";
-    } catch (error) {
-      throw error;
+    const delivery = await this.publisher.publish(event);
+    if (delivery.outcome === "failed") {
+      await this.outbox.recordFailure(event.eventId, delivery.reason);
+      return "failed";
     }
+    await this.afterConfirmation();
+    await this.outbox.markPublished(event.eventId, attemptedAt);
+    return "published";
   }
 }
 

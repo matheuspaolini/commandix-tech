@@ -1,4 +1,8 @@
-import type { Role } from "@/modules/tenant/tenant.contract";
+import type {
+  AuthenticatedIdentity,
+  AuthenticatedRole,
+} from "@/modules/auth/domain/authenticated-identity";
+import type { AccessTokenCodec } from "@/modules/auth/application/token-codecs";
 
 const BASE64_URL = /^[A-Za-z0-9_-]+$/;
 const TTL_SECONDS = 15 * 60;
@@ -8,23 +12,15 @@ export interface Clock {
   nowInSeconds(): number;
 }
 
-const SYSTEM_CLOCK: Clock = {
-  nowInSeconds: () => Math.floor(Date.now() / 1000),
-};
-
 export type AccessTokenClaims = {
   sub: string;
   tenantId: string;
-  role: Role;
+  role: AuthenticatedRole;
   iat: number;
   exp: number;
 };
 
-export type AccessTokenSubject = {
-  userId: string;
-  tenantId: string;
-  role: Role;
-};
+export type AccessTokenSubject = AuthenticatedIdentity;
 
 type JwtParts = {
   header: string;
@@ -180,13 +176,13 @@ function constantWorkEqual(expected: string, received: string): boolean {
   return difference === 0;
 }
 
-export class AccessTokenService {
+export class BunAccessTokenCodec implements AccessTokenCodec {
   private readonly codec: JwtSegmentCodec;
   private readonly signer: JwtSigner;
 
   constructor(
     secret: string,
-    private readonly clock: Clock = SYSTEM_CLOCK,
+    private readonly clock: Clock,
   ) {
     assertValidSecret(secret);
     this.codec = new BunBase64UrlJsonCodec();
@@ -204,7 +200,7 @@ export class AccessTokenService {
     return `${signingInput}.${signature}`;
   }
 
-  verify(token: string): AccessTokenClaims | null {
+  verify(token: string): AuthenticatedIdentity | null {
     const parts = parseJwtParts(token);
     if (!parts) return null;
 
@@ -218,6 +214,15 @@ export class AccessTokenService {
     const payload = this.codec.decode(parts.payload);
     const currentTime = this.clock.nowInSeconds();
 
-    return toAccessTokenClaims(payload, currentTime);
+    const claims = toAccessTokenClaims(payload, currentTime);
+    return claims
+      ? {
+          userId: claims.sub,
+          tenantId: claims.tenantId,
+          role: claims.role,
+          iat: claims.iat,
+          exp: claims.exp,
+        }
+      : null;
   }
 }

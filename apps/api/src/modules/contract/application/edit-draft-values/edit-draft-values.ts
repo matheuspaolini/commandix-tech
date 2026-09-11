@@ -1,4 +1,5 @@
 import type { DraftEditTransactions } from "@/modules/contract/application/edit-draft-values/draft-edit-transaction";
+import type { ContractTemplateVersion } from "@/modules/contract/application/contract-template-version";
 import {
   ContractNotFound,
   ContractRevisionConflict,
@@ -8,8 +9,8 @@ import type { ContractSnapshot } from "@/modules/contract/domain/contract-snapsh
 import {
   contractValuesEqual,
   resolveDraftEditValues,
+  type ContractValues,
 } from "@/modules/contract/domain/contract-values";
-import type { ContractDetail } from "@/modules/contract/application/read-contract-detail/read-contract-detail";
 import {
   ContractEntity,
   ContractIdentifier,
@@ -42,17 +43,22 @@ export interface EditIdGenerator {
   next(): string;
 }
 
-const SYSTEM_CLOCK: EditClock = { now: () => new Date() };
-const UUIDS: EditIdGenerator = { next: () => crypto.randomUUID() };
+export type EditedDraft = {
+  id: string;
+  status: "DRAFT";
+  revision: number;
+  values: ContractValues;
+  templateVersion: ContractTemplateVersion;
+};
 
 export class EditDraftValues {
   constructor(
     private readonly transactions: DraftEditTransactions,
-    private readonly clock: EditClock = SYSTEM_CLOCK,
-    private readonly ids: EditIdGenerator = UUIDS,
+    private readonly clock: EditClock,
+    private readonly ids: EditIdGenerator,
   ) {}
 
-  execute(command: EditDraftValuesCommand): Promise<ContractDetail> {
+  execute(command: EditDraftValuesCommand): Promise<EditedDraft> {
     return this.transactions.run(async (transaction) => {
       const current = await transaction.findForUpdate(command);
       if (!current) throw new ContractNotFound();
@@ -65,7 +71,7 @@ export class EditDraftValues {
         supplied: command.suppliedValues,
         clearedKeys: command.clearedKeys,
       });
-      const currentDetail: ContractDetail = {
+      const currentDetail: EditedDraft = {
         id: current.id,
         status: current.status,
         revision: current.revision,

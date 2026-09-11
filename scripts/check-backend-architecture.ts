@@ -44,6 +44,60 @@ function inspectFile(file: string): void {
     const violation = importViolation(file, target, specifier, STRICT);
     if (violation) failures.push(`${relative(ROOT, file)}: ${violation}`);
   }
+  const runtimeViolation = forbiddenRuntimeUsage(source, classify(file));
+  if (runtimeViolation)
+    failures.push(`${relative(ROOT, file)}: ${runtimeViolation}`);
+}
+
+function forbiddenRuntimeUsage(
+  source: ts.SourceFile,
+  info: FileInfo,
+): string | undefined {
+  if (!STRICT || !["domain", "application"].includes(info.layer))
+    return undefined;
+  const forbiddenImports = new Set([
+    "@nestjs/common",
+    "@nestjs/core",
+    "@nestjs/microservices",
+    "@commandix/database",
+    "@prisma/client",
+    "crypto",
+    "node:crypto",
+    "amqplib",
+    "amqp-connection-manager",
+    "@commandix/contract-events",
+  ]);
+  for (const specifier of importSpecifiers(source)) {
+    if (forbiddenImports.has(specifier))
+      return `${info.layer} must not import ${specifier}`;
+  }
+  let violation: string | undefined;
+  const visit = (node: ts.Node): void => {
+    if (violation) return;
+    if (
+      ts.isIdentifier(node) &&
+      ["Bun", "process", "crypto", "Buffer", "console"].includes(node.text)
+    )
+      violation = `${info.layer} must not use runtime global ${node.text}`;
+    if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      ts.isIdentifier(node.expression.expression) &&
+      node.expression.expression.text === "Date" &&
+      node.expression.name.text === "now"
+    )
+      violation = `${info.layer} must not read system time directly`;
+    if (
+      ts.isNewExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === "Date" &&
+      !node.arguments?.length
+    )
+      violation = `${info.layer} must not read system time directly`;
+    node.forEachChild(visit);
+  };
+  source.forEachChild(visit);
+  return violation;
 }
 
 function importSpecifiers(source: ts.SourceFile): string[] {
@@ -145,11 +199,26 @@ function classify(file: string): FileInfo {
   const [, workspace, , namespace = "legacy", ...rest] = path.split("/");
   const normalizedWorkspace = workspace === "api" ? "api" : "worker";
   if (namespace === "bootstrap")
-    return { workspace: normalizedWorkspace, feature: "bootstrap", layer: "bootstrap", path };
+    return {
+      workspace: normalizedWorkspace,
+      feature: "bootstrap",
+      layer: "bootstrap",
+      path,
+    };
   if (namespace === "platform")
-    return { workspace: normalizedWorkspace, feature: "platform", layer: "platform", path };
+    return {
+      workspace: normalizedWorkspace,
+      feature: "platform",
+      layer: "platform",
+      path,
+    };
   if (namespace !== "modules" || !rest[0])
-    return { workspace: normalizedWorkspace, feature: "legacy", layer: "legacy", path };
+    return {
+      workspace: normalizedWorkspace,
+      feature: "legacy",
+      layer: "legacy",
+      path,
+    };
   const [feature, ...featurePath] = rest;
   const layer = featurePath.find((part): part is Layer =>
     ["domain", "application", "infrastructure", "presentation"].includes(part),
@@ -229,7 +298,8 @@ function isAllowedCrossFeatureImport(
   if (target.path === "apps/api/src/modules/tenant/tenant.contract.ts")
     return (
       source.workspace === "api" &&
-      (source.feature === "auth" || source.path === "apps/api/src/bootstrap/seed.ts")
+      (source.feature === "auth" ||
+        source.path === "apps/api/src/bootstrap/seed.ts")
     );
   if (target.path === "apps/api/src/modules/auth/auth.http-contract.ts")
     return (
@@ -273,9 +343,7 @@ function isPasswordContractException(
 }
 
 function isRootComposition(source: FileInfo): boolean {
-  return (
-    source.layer === "bootstrap" || source.layer === "module"
-  );
+  return source.layer === "bootstrap" || source.layer === "module";
 }
 
 function isFeatureRootModule(target: FileInfo): boolean {
@@ -351,7 +419,10 @@ function assertFixtureRules(): void {
       ROOT,
       "apps/api/src/modules/contract/application/edit-draft-values/nested/fixture.ts",
     ),
-    join(ROOT, "apps/api/src/modules/contract/application/edit-draft-values/port.ts"),
+    join(
+      ROOT,
+      "apps/api/src/modules/contract/application/edit-draft-values/port.ts",
+    ),
     "../port",
     true,
   );
@@ -369,9 +440,32 @@ function assertFixtureRules(): void {
   );
   const rejectedSeedCrossing = importViolation(
     join(ROOT, "apps/api/src/bootstrap/seed.ts"),
-    join(ROOT, "apps/api/src/modules/contract/presentation/contract.controller.ts"),
+    join(
+      ROOT,
+      "apps/api/src/modules/contract/presentation/contract.controller.ts",
+    ),
     "@/modules/contract/presentation/contract.controller",
     true,
+  );
+  const directSystemTime = runtimeFixtureViolation("application", "new Date()");
+  const directIdGeneration = runtimeFixtureViolation(
+    "application",
+    "crypto.randomUUID()",
+  );
+  const rejectedPrismaImport = runtimeFixtureViolation(
+    "domain",
+    'import { PrismaClient } from "@prisma/client";',
+  );
+  const rejectedTechnicalImports = [
+    "@nestjs/common",
+    "amqplib",
+    "@commandix/contract-events",
+    "node:crypto",
+  ].every((specifier) =>
+    runtimeFixtureViolation("application", `import value from "${specifier}";`),
+  );
+  const rejectedRuntimeGlobals = ["Bun", "process", "Buffer", "console"].every(
+    (global) => runtimeFixtureViolation("domain", `${global};`),
   );
   if (
     allowed ||
@@ -384,7 +478,13 @@ function assertFixtureRules(): void {
     !rejectedRootWiring ||
     allowedParentRelative ||
     !rejectedParentRelative ||
-    !rejectedSeedCrossing
+    !rejectedSeedCrossing ||
+    (STRICT &&
+      (!directSystemTime ||
+        !directIdGeneration ||
+        !rejectedPrismaImport ||
+        !rejectedTechnicalImports ||
+        !rejectedRuntimeGlobals))
   )
     failures.push(
       "architecture fixtures: checker rules are not enforcing required dependency shapes",
@@ -393,4 +493,19 @@ function assertFixtureRules(): void {
 
 function fixture(feature: string, layer: Layer, name: string): string {
   return join(ROOT, "apps/api/src/modules", feature, layer, name);
+}
+
+function runtimeFixtureViolation(
+  layer: "domain" | "application",
+  source: string,
+): string | undefined {
+  return forbiddenRuntimeUsage(
+    ts.createSourceFile("fixture.ts", source, ts.ScriptTarget.Latest, true),
+    {
+      workspace: "api",
+      feature: "fixture",
+      layer,
+      path: `apps/api/src/modules/fixture/${layer}/fixture.ts`,
+    },
+  );
 }

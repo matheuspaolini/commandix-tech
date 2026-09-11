@@ -22,7 +22,7 @@ const EVENT: OutboxEvent = {
 test("reserves, confirms, and marks an Outbox event published", async () => {
   const calls: unknown[] = [];
   const repository: ActivationOutboxRepository = {
-    findDue: async () => [],
+    findDue: async () => [EVENT],
     reserveAttempt: async (eventId, attempt) => {
       calls.push({ eventId, attempt });
     },
@@ -41,7 +41,7 @@ test("reserves, confirms, and marks an Outbox event published", async () => {
     now: () => new Date("2026-09-10T18:31:00.000Z"),
   });
 
-  await useCase.execute(EVENT);
+  await useCase.execute({ limit: 25 });
 
   expect(calls).toStrictEqual([
     {
@@ -63,7 +63,7 @@ test("reserves, confirms, and marks an Outbox event published", async () => {
 test("records a safe failure and leaves publication pending", async () => {
   const failures: unknown[] = [];
   const repository: ActivationOutboxRepository = {
-    findDue: async () => [],
+    findDue: async () => [EVENT],
     reserveAttempt: async () => {},
     recordFailure: async (eventId, reason) => {
       failures.push({ eventId, reason });
@@ -75,12 +75,14 @@ test("records a safe failure and leaves publication pending", async () => {
   const publisher: ContractEventPublisher = {
     publish: async () => ({ outcome: "failed", reason: "RETURNED" }),
   };
-  const useCase = new PublishContractActivatedEvent(repository, publisher);
+  const useCase = new PublishContractActivatedEvent(repository, publisher, {
+    now: () => new Date("2026-09-10T18:31:00.000Z"),
+  });
 
-  const result = await useCase.execute(EVENT);
+  const result = await useCase.execute({ limit: 25 });
 
   expect({ result, failures }).toStrictEqual({
-    result: "failed",
+    result: [{ event: EVENT, outcome: "failed" }],
     failures: [{ eventId: EVENT.eventId, reason: "RETURNED" }],
   });
 });
@@ -88,7 +90,7 @@ test("records a safe failure and leaves publication pending", async () => {
 test("keeps a confirmed event retryable when marking is interrupted", async () => {
   let marked = false;
   const repository: ActivationOutboxRepository = {
-    findDue: async () => [],
+    findDue: async () => [EVENT],
     reserveAttempt: async () => {},
     recordFailure: async () => {},
     markPublished: async () => {
@@ -107,14 +109,11 @@ test("keeps a confirmed event retryable when marking is interrupted", async () =
     },
   );
 
-  const error = await useCase.execute(EVENT).catch((caught: unknown) => caught);
+  const result = await useCase.execute({ limit: 25 });
 
-  expect({
-    marked,
-    message: error instanceof Error ? error.message : undefined,
-  }).toStrictEqual({
+  expect({ marked, result }).toStrictEqual({
     marked: false,
-    message: "simulated_post_confirmation_failure",
+    result: [{ event: EVENT, outcome: "unexpected_failure" }],
   });
 });
 

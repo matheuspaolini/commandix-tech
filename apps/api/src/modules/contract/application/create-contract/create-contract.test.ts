@@ -91,15 +91,19 @@ test("creates a revision-one Draft and its first History entry", async () => {
 
 test("requires an active Template before inserting", async () => {
   let inserted = false;
-  const useCase = new CreateContract({
-    run: (operation) =>
-      operation({
-        findActiveTemplateForUpdate: async () => null,
-        insertContractAndHistory: async () => {
-          inserted = true;
-        },
-      }),
-  });
+  const useCase = new CreateContract(
+    {
+      run: (operation) =>
+        operation({
+          findActiveTemplateForUpdate: async () => null,
+          insertContractAndHistory: async () => {
+            inserted = true;
+          },
+        }),
+    },
+    { now: () => new Date(0) },
+    { next: () => "unused-id" },
+  );
   let error: unknown;
   try {
     await useCase.execute({

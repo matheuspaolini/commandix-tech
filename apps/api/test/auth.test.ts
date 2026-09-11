@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  AccessTokenService,
+  BunAccessTokenCodec,
   type AccessTokenClaims,
   type AccessTokenSubject,
-} from "@/modules/auth/domain/access-token";
+} from "@/modules/auth/infrastructure/bun-access-token-codec";
 import {
   BunPasswordHasher,
   type PasswordHasher,
@@ -22,6 +22,8 @@ const JWT_SECRET = "local_development_jwt_secret_with_32_chars";
 const ISSUED_AT = 1_700_000_000;
 const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
 const PASSWORD = "correct horse battery staple";
+const COMPATIBLE_ACCESS_TOKEN =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhOTQ3NmJjMS1jOGQzLTRmZjctOWM3ZC03ZTg5YWIzYjNlYzQiLCJ0ZW5hbnRJZCI6ImQ2YzNkY2Y1LTUzZjQtNDBkOS1iZjhmLTlmYjU3ZjI5ZDZhOSIsInJvbGUiOiJBRE1JTiIsImlhdCI6MTcwMDAwMDAwMCwiZXhwIjoxNzAwMDAwOTAwfQ.AUCXm2-NsXsAAXyLSAvDz-6wAXQbh8dgWjoHtBkC3n4";
 
 const CANONICAL_IDENTITY = {
   slug: "acme",
@@ -42,6 +44,14 @@ const EXPECTED_ACCESS_TOKEN_CLAIMS = {
   iat: ISSUED_AT,
   exp: ISSUED_AT + ACCESS_TOKEN_TTL_SECONDS,
 } satisfies AccessTokenClaims;
+
+const EXPECTED_VERIFIED_IDENTITY = {
+  userId: ACCESS_TOKEN_SUBJECT.userId,
+  tenantId: ACCESS_TOKEN_SUBJECT.tenantId,
+  role: ACCESS_TOKEN_SUBJECT.role,
+  iat: ISSUED_AT,
+  exp: ISSUED_AT + ACCESS_TOKEN_TTL_SECONDS,
+};
 
 const invalidIdentityCases = [
   ["consecutive slug separators", { slug: "acme--north" }],
@@ -64,7 +74,7 @@ function identityInput(overrides: Partial<IdentityInput> = {}): IdentityInput {
 }
 
 function createTokenService(nowInSeconds = ISSUED_AT) {
-  return new AccessTokenService(JWT_SECRET, {
+  return new BunAccessTokenCodec(JWT_SECRET, {
     nowInSeconds: () => nowInSeconds,
   });
 }
@@ -152,17 +162,21 @@ describe("BunPasswordHasher", () => {
   });
 });
 
-describe("AccessTokenService", () => {
+describe("BunAccessTokenCodec", () => {
   test("issues a JWT with three segments", () => {
     const segments = issueAccessToken().split(".");
     expect(segments).toHaveLength(3);
+  });
+
+  test("preserves the serialized JWT contract", () => {
+    expect(issueAccessToken()).toBe(COMPATIBLE_ACCESS_TOKEN);
   });
 
   test("verifies an issued token", () => {
     const tokenService = createTokenService();
     const token = tokenService.issue(ACCESS_TOKEN_SUBJECT);
     expect(tokenService.verify(token)).toStrictEqual(
-      EXPECTED_ACCESS_TOKEN_CLAIMS,
+      EXPECTED_VERIFIED_IDENTITY,
     );
   });
 

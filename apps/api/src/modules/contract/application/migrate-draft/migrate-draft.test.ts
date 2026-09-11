@@ -258,8 +258,12 @@ test("serializes competing current-revision migrations to one persisted change",
       }
     },
   };
-  const first = new MigrateDraft(transactions);
-  const second = new MigrateDraft(transactions);
+  const collaborators = [
+    { now: () => new Date(0) },
+    { next: () => "unused-id" },
+  ] as const;
+  const first = new MigrateDraft(transactions, ...collaborators);
+  const second = new MigrateDraft(transactions, ...collaborators);
 
   const outcomes = await Promise.allSettled([
     first.execute({

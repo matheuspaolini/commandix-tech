@@ -1,7 +1,12 @@
 import { Module } from "@nestjs/common";
 
 import { AccessTokenGuard } from "@/modules/auth/presentation/access-token.guard";
-import { AccessTokenService } from "@/modules/auth/domain/access-token";
+import { BunAccessTokenCodec } from "@/modules/auth/infrastructure/bun-access-token-codec";
+import { BunRefreshCredentialCodec } from "@/modules/auth/infrastructure/bun-refresh-credential-codec";
+import {
+  ACCESS_TOKEN_CODEC,
+  REFRESH_CREDENTIAL_CODEC,
+} from "@/modules/auth/application/token-codecs";
 import { AuthController } from "@/modules/auth/presentation/auth.controller";
 import { AuthService } from "@/modules/auth/application/sign-in/auth.service";
 import { AuthLifecycleLogger } from "@/modules/auth/infrastructure/auth-lifecycle-logger";
@@ -15,14 +20,23 @@ import { RefreshSessionService } from "@/modules/auth/application/refresh-sessio
 import { AUTH_LIFECYCLE_WRITER } from "@/modules/auth/application/refresh-session/auth-lifecycle-writer";
 import { RuntimeConfig } from "@/platform/runtime-config";
 
+const AUTH_CLOCK = {
+  nowInSeconds: () => Math.floor(Date.now() / 1_000),
+};
+
 @Module({
   controllers: [AuthController],
   providers: [
     {
-      provide: AccessTokenService,
+      provide: BunAccessTokenCodec,
       useFactory: (config: RuntimeConfig) =>
-        new AccessTokenService(config.jwtSecret),
+        new BunAccessTokenCodec(config.jwtSecret, AUTH_CLOCK),
       inject: [RuntimeConfig],
+    },
+    { provide: ACCESS_TOKEN_CODEC, useExisting: BunAccessTokenCodec },
+    {
+      provide: REFRESH_CREDENTIAL_CODEC,
+      useFactory: () => new BunRefreshCredentialCodec(),
     },
     AccessTokenGuard,
     BrowserOriginGuard,
@@ -37,11 +51,18 @@ import { RuntimeConfig } from "@/platform/runtime-config";
     },
     {
       provide: RefreshSessionService,
-      useFactory: (sessions, accessTokens, logger) =>
-        new RefreshSessionService(sessions, accessTokens, logger),
+      useFactory: (sessions, accessTokens, refreshCredentials, logger) =>
+        new RefreshSessionService(
+          sessions,
+          accessTokens,
+          refreshCredentials,
+          logger,
+          AUTH_CLOCK,
+        ),
       inject: [
         REFRESH_SESSION_REPOSITORY,
-        AccessTokenService,
+        ACCESS_TOKEN_CODEC,
+        REFRESH_CREDENTIAL_CODEC,
         AUTH_LIFECYCLE_WRITER,
       ],
     },
@@ -52,6 +73,6 @@ import { RuntimeConfig } from "@/platform/runtime-config";
       inject: [IDENTITY_REPOSITORY, PASSWORD_HASHER, RefreshSessionService],
     },
   ],
-  exports: [AccessTokenGuard, AccessTokenService],
+  exports: [AccessTokenGuard, ACCESS_TOKEN_CODEC],
 })
 export class AuthModule {}

@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import { AccessTokenService } from "@/modules/auth/domain/access-token";
+import { BunAccessTokenCodec } from "@/modules/auth/infrastructure/bun-access-token-codec";
 import { AuthLifecycleLogger } from "@/modules/auth/infrastructure/auth-lifecycle-logger";
 import {
+  BunRefreshCredentialCodec,
   createRefreshCredential,
   parseRefreshCredential,
-} from "@/modules/auth/domain/refresh-credential";
+} from "@/modules/auth/infrastructure/bun-refresh-credential-codec";
 import type {
   CreateRefreshSession,
   CreatedRefreshSession,
@@ -19,6 +20,8 @@ import { RefreshSessionService } from "@/modules/auth/application/refresh-sessio
 
 const NOW = 1_700_000_000;
 const JWT_SECRET = "local_development_jwt_secret_with_32_chars";
+const KNOWN_REFRESH_CREDENTIAL =
+  "a9476bc1-c8d3-4ff7-9c7d-7e89ab3b3ec4.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 const SUBJECT = {
   userId: "a9476bc1-c8d3-4ff7-9c7d-7e89ab3b3ec4",
   tenantId: "d6c3dcf5-53f4-40d9-bf8f-9fb57f29d6a9",
@@ -56,6 +59,13 @@ describe("Refresh credential", () => {
   test("rejects malformed credentials", () => {
     expect(parseRefreshCredential("not-a-credential")).toBeNull();
   });
+
+  test("preserves refresh credential parsing and hashing", () => {
+    expect(parseRefreshCredential(KNOWN_REFRESH_CREDENTIAL)).toStrictEqual({
+      selector: "a9476bc1-c8d3-4ff7-9c7d-7e89ab3b3ec4",
+      secretHash: "DwBzhbb51LfusnSGBa_hqYSgo7-j8BTQnip4TOnlzRo",
+    });
+  });
 });
 
 describe("RefreshSessionService", () => {
@@ -63,7 +73,8 @@ describe("RefreshSessionService", () => {
     const repository = new RecordingRepository();
     const service = new RefreshSessionService(
       repository,
-      new AccessTokenService(JWT_SECRET, { nowInSeconds: () => NOW }),
+      new BunAccessTokenCodec(JWT_SECRET, { nowInSeconds: () => NOW }),
+      new BunRefreshCredentialCodec(),
       new AuthLifecycleLogger(),
       { nowInSeconds: () => NOW },
     );

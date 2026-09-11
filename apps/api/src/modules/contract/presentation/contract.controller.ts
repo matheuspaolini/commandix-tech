@@ -39,11 +39,12 @@ import {
   ContractStatusConflict,
   TransitionStatus,
 } from "@/modules/contract/application/transition-status/transition-status";
+import { ListContracts } from "@/modules/contract/application/list-contracts/list-contracts";
 import {
-  ListContracts,
+  InvalidContractPagination,
   parseContractRegisterQuery,
-} from "@/modules/contract/application/list-contracts/list-contracts";
-import { InvalidContractPagination } from "@/modules/contract/application/list-contracts/contract-register-cursor";
+  toContractRegisterResponse,
+} from "@/modules/contract/presentation/contract-register-pagination";
 import { ReadContractHistory } from "@/modules/contract/application/read-contract-history/read-contract-history";
 import { EditDraftValuesDto } from "@/modules/contract/presentation/edit-draft-values.dto";
 import { EditDraftValues } from "@/modules/contract/application/edit-draft-values/edit-draft-values";
@@ -77,10 +78,11 @@ export class ContractController {
   ) {
     try {
       const pagination = parseContractRegisterQuery(query);
-      return await this.listContracts.execute({
+      const page = await this.listContracts.execute({
         tenantId: request.identity!.tenantId,
         ...pagination,
       });
+      return toContractRegisterResponse(page);
     } catch (error) {
       if (error instanceof InvalidContractPagination)
         throw new PublicHttpException(400, { code: "INVALID_PAGINATION" });
@@ -99,7 +101,7 @@ export class ContractController {
     const identity = request.identity!;
     const fields = {
       tenantId: identity.tenantId,
-      actorId: identity.sub,
+      actorId: identity.userId,
       contractId,
       targetVersionId: body.targetVersionId,
       expectedRevision: body.expectedRevision,
@@ -107,7 +109,7 @@ export class ContractController {
     try {
       const contract = await this.migrateDraft.execute({
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         contractId,
         expectedRevision: body.expectedRevision,
         targetVersionId: body.targetVersionId,
@@ -158,7 +160,7 @@ export class ContractController {
     try {
       const contract = await this.editDraftValues.execute({
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         contractId,
         expectedRevision: body.expectedRevision,
         suppliedValues: body.values,
@@ -166,7 +168,7 @@ export class ContractController {
       });
       const fields = {
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         contractId,
         revision: contract.revision,
       };
@@ -178,7 +180,7 @@ export class ContractController {
       if (error instanceof InvalidContractValues) {
         this.transitionLogger.editRejected({
           tenantId: identity.tenantId,
-          actorId: identity.sub,
+          actorId: identity.userId,
           contractId,
           expectedRevision: body.expectedRevision,
           reason: "INVALID_CONTRACT_VALUES",
@@ -192,7 +194,7 @@ export class ContractController {
       if (!code) throw error;
       this.transitionLogger.editRejected({
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         contractId,
         expectedRevision: body.expectedRevision,
         reason: code,
@@ -233,7 +235,7 @@ export class ContractController {
     try {
       const result = await this.transitionStatus.execute({
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         contractId,
         expectedRevision: body.expectedRevision,
         targetStatus: "ACTIVE",
@@ -243,7 +245,7 @@ export class ContractController {
         throw new Error("Unexpected transition result");
       this.transitionLogger.activated({
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         contractId,
         revision: result.contract.revision,
         eventId: result.eventId,
@@ -254,7 +256,7 @@ export class ContractController {
       if (!code) throw error;
       this.transitionLogger.rejected({
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         contractId,
         expectedRevision: body.expectedRevision,
         reason: code,
@@ -277,7 +279,7 @@ export class ContractController {
     try {
       const result = await this.transitionStatus.execute({
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         contractId,
         expectedRevision: body.expectedRevision,
         targetStatus: "CLOSED",
@@ -287,7 +289,7 @@ export class ContractController {
         throw new Error("Unexpected transition result");
       this.transitionLogger.closed({
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         contractId,
         revision: result.contract.revision,
       });
@@ -297,7 +299,7 @@ export class ContractController {
       if (!code) throw error;
       this.transitionLogger.closureRejected({
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         contractId,
         expectedRevision: body.expectedRevision,
         reason: code,
@@ -338,17 +340,17 @@ export class ContractController {
     try {
       const created = await this.createContract.execute({
         tenantId: identity.tenantId,
-        actorId: identity.sub,
+        actorId: identity.userId,
         suppliedValues: body.values,
       });
       response.location(`/contracts/${created.id}`);
-      this.logger.created(identity.tenantId, identity.sub, created);
+      this.logger.created(identity.tenantId, identity.userId, created);
       return created;
     } catch (error) {
       if (error instanceof ActiveTemplateRequired) {
         this.logger.rejected(
           identity.tenantId,
-          identity.sub,
+          identity.userId,
           "ACTIVE_TEMPLATE_REQUIRED",
         );
         throw new PublicHttpException(409, {
@@ -358,7 +360,7 @@ export class ContractController {
       if (error instanceof InvalidContractValues) {
         this.logger.rejected(
           identity.tenantId,
-          identity.sub,
+          identity.userId,
           "INVALID_CONTRACT_VALUES",
         );
         throw new PublicHttpException(400, {

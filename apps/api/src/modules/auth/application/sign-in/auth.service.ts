@@ -2,7 +2,7 @@ import {
   canonicalIdentity,
   type IdentityInput,
 } from "@/modules/tenant/tenant.contract";
-import type { AccessTokenClaims } from "@/modules/auth/domain/access-token";
+import type { AuthenticatedIdentity } from "@/modules/auth/domain/authenticated-identity";
 import { AuthenticationFailed } from "@/modules/auth/domain/errors";
 import type { PasswordHasher } from "@/platform/password-hasher";
 import type { IdentityRepository } from "./repository";
@@ -30,9 +30,9 @@ export class AuthService {
     return this.refreshSessions.create(stored);
   }
 
-  async identity(claims: AccessTokenClaims) {
+  async identity(claims: AuthenticatedIdentity) {
     const identity = await this.identities.findVerifiedIdentity(
-      claims.sub,
+      claims.userId,
       claims.tenantId,
     );
     if (!identity || identity.role !== claims.role) {

@@ -4,7 +4,6 @@ import type {
   ClosureTransaction,
 } from "@/modules/contract/application/transition-status/status-transition-transaction";
 import {
-  ContractLifecycle,
   ContractRevisionConflict,
   ContractStatusConflict,
   type TransitionClock,
@@ -35,8 +34,8 @@ function activationUseCase(
   return new TransitionStatus(
     { run: (operation) => operation(transaction) },
     { run: (operation) => operation(closure) },
-    options?.clock,
-    options?.ids,
+    options?.clock ?? { now: () => new Date(0) },
+    options?.ids ?? { next: () => "unused-id" },
   );
 }
 
@@ -51,8 +50,8 @@ function closureUseCase(
   return new TransitionStatus(
     { run: (operation) => operation(activation) },
     { run: (operation) => operation(transaction) },
-    options?.clock,
-    options?.ids,
+    options?.clock ?? { now: () => new Date(0) },
+    options?.ids ?? { next: () => "unused-id" },
   );
 }
 
@@ -250,29 +249,4 @@ test("closes a current Active with one History entry and no Outbox event", async
     },
     generatedIds: 1,
   });
-});
-
-test("enforces the complete Contract lifecycle matrix", () => {
-  const statuses = ["DRAFT", "ACTIVE", "CLOSED"] as const;
-  const observed = statuses.flatMap((source) =>
-    statuses.map((target) => {
-      try {
-        return `${source}:${target}:${new ContractLifecycle(source).transitionTo(target)}`;
-      } catch (error) {
-        return `${source}:${target}:${error instanceof ContractStatusConflict ? "CONFLICT" : "ERROR"}`;
-      }
-    }),
-  );
-
-  expect(observed).toStrictEqual([
-    "DRAFT:DRAFT:CONFLICT",
-    "DRAFT:ACTIVE:ACTIVE",
-    "DRAFT:CLOSED:CONFLICT",
-    "ACTIVE:DRAFT:CONFLICT",
-    "ACTIVE:ACTIVE:CONFLICT",
-    "ACTIVE:CLOSED:CLOSED",
-    "CLOSED:DRAFT:CONFLICT",
-    "CLOSED:ACTIVE:CONFLICT",
-    "CLOSED:CLOSED:CONFLICT",
-  ]);
 });

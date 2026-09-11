@@ -1,4 +1,4 @@
-import type { ContractDetail } from "@/modules/contract/application/read-contract-detail/read-contract-detail";
+import type { ContractTemplateVersion } from "@/modules/contract/application/contract-template-version";
 import type { ContractSnapshot } from "@/modules/contract/domain/contract-snapshot";
 import type { ContractValues } from "@/modules/contract/domain/contract-values";
 import type { ContractStatus } from "@/modules/contract/domain/entities";
@@ -12,7 +12,7 @@ export type LockedStatusTransitionContract = {
   status: ContractStatus;
   revision: number;
   values: ContractValues;
-  templateVersion: ContractDetail["templateVersion"];
+  templateVersion: ContractTemplateVersion;
 };
 
 type HistoryPersistence<Action extends "ACTIVATED" | "CLOSED"> = {
