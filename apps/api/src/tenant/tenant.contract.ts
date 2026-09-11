@@ -4,4 +4,4 @@ export {
   InvalidIdentityInput,
   type IdentityInput,
   type Role,
-} from "./identity";
+} from "./domain/identity";

@@ -1,12 +1,12 @@
-import type { AccessTokenSubject, Clock } from "./access-token";
-import { AccessTokenService } from "./access-token";
-import { AuthLifecycleLogger } from "./auth-lifecycle-logger";
-import { AuthenticationFailed } from "./errors";
+import type { AccessTokenSubject, Clock } from "@/auth/domain/access-token";
+import { AccessTokenService } from "@/auth/domain/access-token";
+import { AuthenticationFailed } from "@/auth/domain/errors";
 import {
   createRefreshCredential,
   parseRefreshCredential,
-} from "./refresh-credential";
+} from "@/auth/domain/refresh-credential";
 import type { RefreshSessionRepository } from "./refresh-session.repository";
+import type { AuthLifecycleWriter } from "./auth-lifecycle-writer";
 
 const REFRESH_SESSION_SECONDS = 7 * 24 * 60 * 60;
 
@@ -24,7 +24,7 @@ export class RefreshSessionService {
   constructor(
     private readonly sessions: RefreshSessionRepository,
     private readonly accessTokens: AccessTokenService,
-    private readonly logger: AuthLifecycleLogger,
+    private readonly logger: AuthLifecycleWriter,
     private readonly clock: Clock = SYSTEM_CLOCK,
   ) {}
 

@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 
-import { DatabaseService } from "../database";
-import { constantWorkEqual } from "./refresh-session.security";
+import { DatabaseService } from "@/database";
+import { constantWorkEqual } from "@/auth/domain/refresh-session.security";
 import type {
   CreateRefreshSession,
   CreatedRefreshSession,
@@ -10,7 +10,7 @@ import type {
   RevokeRefreshSession,
   RotateRefreshSession,
   RotationResult,
-} from "./refresh-session.repository";
+} from "@/auth/application/refresh-session/refresh-session.repository";
 
 @Injectable()
 export class PrismaRefreshSessionRepository implements RefreshSessionRepository {

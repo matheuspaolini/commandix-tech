@@ -1,9 +1,9 @@
 import { Prisma } from "@commandix/database";
 import { Injectable } from "@nestjs/common";
 
-import { DatabaseService } from "../database";
-import type { CreatedIdentity } from "../auth/repository";
-import type { IdentityInput } from "./identity";
+import { DatabaseService } from "@/database";
+import type { CreatedIdentity } from "@/auth/application/sign-in/repository";
+import type { IdentityInput } from "@/tenant/domain/identity";
 
 export class DuplicateOnboardingIdentity extends Error {}
 

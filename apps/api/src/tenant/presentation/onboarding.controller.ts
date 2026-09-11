@@ -6,10 +6,10 @@ import {
   Post,
 } from "@nestjs/common";
 
-import { CredentialsDto } from "../auth/dto";
-import { InvalidIdentityInput } from "./identity";
-import { DuplicateOnboardingIdentity } from "./onboarding.repository";
-import { OnboardingService } from "./onboarding.service";
+import { CredentialsDto } from "@/auth/presentation/dto";
+import { InvalidIdentityInput } from "@/tenant/domain/identity";
+import { DuplicateOnboardingIdentity } from "@/tenant/application/onboarding/onboarding.repository";
+import { OnboardingService } from "@/tenant/application/onboarding/onboarding.service";
 
 @Controller()
 export class OnboardingController {

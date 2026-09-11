@@ -1,5 +1,5 @@
-import type { AccessTokenSubject } from "./access-token";
-import type { PresentedRefreshCredential } from "./refresh-credential";
+import type { AccessTokenSubject } from "@/auth/domain/access-token";
+import type { PresentedRefreshCredential } from "@/auth/domain/refresh-credential";
 
 export type NewStoredRefreshCredential = PresentedRefreshCredential;
 

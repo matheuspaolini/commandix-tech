@@ -4,19 +4,19 @@ import {
   AccessTokenService,
   type AccessTokenClaims,
   type AccessTokenSubject,
-} from "../src/auth/access-token";
+} from "../src/auth/domain/access-token";
 import {
   BunPasswordHasher,
   type PasswordHasher,
 } from "../src/platform/password-hasher";
-import type { CreatedIdentity } from "../src/auth/repository";
+import type { CreatedIdentity } from "../src/auth/application/sign-in/repository";
 import {
   canonicalIdentity,
   type IdentityInput,
   InvalidIdentityInput,
-} from "../src/tenant/identity";
-import type { OnboardingRepository } from "../src/tenant/onboarding.repository";
-import { OnboardingService } from "../src/tenant/onboarding.service";
+} from "../src/tenant/domain/identity";
+import type { OnboardingRepository } from "../src/tenant/application/onboarding/onboarding.repository";
+import { OnboardingService } from "../src/tenant/application/onboarding/onboarding.service";
 
 const JWT_SECRET = "local_development_jwt_secret_with_32_chars";
 const ISSUED_AT = 1_700_000_000;

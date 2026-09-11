@@ -6,7 +6,7 @@ import request from "supertest";
 import { createApp } from "../src/app";
 import { DatabaseService } from "../src/database";
 import { runtimeConfigFromEnvironment } from "../src/runtime-config";
-import { PrismaOnboardingRepository } from "../src/tenant/onboarding.repository";
+import { PrismaOnboardingRepository } from "../src/tenant/application/onboarding/onboarding.repository";
 
 Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
 Bun.env.AUTH_ALLOWED_ORIGINS ??= "http://localhost:8080";

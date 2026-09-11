@@ -1,11 +1,11 @@
 import { Injectable } from "@nestjs/common";
 
-import { DatabaseService } from "../database";
+import { DatabaseService } from "@/database";
 import type {
   CreatedIdentity,
   IdentityRepository,
   StoredIdentity,
-} from "./repository";
+} from "@/auth/application/sign-in/repository";
 
 @Injectable()
 export class PrismaIdentityRepository implements IdentityRepository {

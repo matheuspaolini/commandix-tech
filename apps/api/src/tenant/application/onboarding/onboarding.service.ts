@@ -1,5 +1,8 @@
-import type { PasswordHasher } from "../platform/password-hasher";
-import { canonicalIdentity, type IdentityInput } from "./identity";
+import type { PasswordHasher } from "@/platform/password-hasher";
+import {
+  canonicalIdentity,
+  type IdentityInput,
+} from "@/tenant/domain/identity";
 import type { OnboardingRepository } from "./onboarding.repository";
 
 export class OnboardingService {

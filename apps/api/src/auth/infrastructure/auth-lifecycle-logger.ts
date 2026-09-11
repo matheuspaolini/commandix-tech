@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 
-import { requestContext } from "../http";
+import { requestContext } from "@/http";
 
 const AUTH_EVENTS = {
   sessionCreated: "auth_refresh_session_created",

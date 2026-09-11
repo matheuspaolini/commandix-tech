@@ -1,4 +1,4 @@
-import type { Role } from "../tenant/tenant.contract";
+import type { Role } from "@/tenant/tenant.contract";
 
 export type StoredIdentity = {
   userId: string;

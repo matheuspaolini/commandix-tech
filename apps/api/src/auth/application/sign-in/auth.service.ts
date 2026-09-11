@@ -1,9 +1,12 @@
-import { canonicalIdentity, type IdentityInput } from "../tenant/tenant.contract";
-import type { AccessTokenClaims } from "./access-token";
-import { AuthenticationFailed } from "./errors";
-import type { PasswordHasher } from "../platform/password-hasher";
+import {
+  canonicalIdentity,
+  type IdentityInput,
+} from "@/tenant/tenant.contract";
+import type { AccessTokenClaims } from "@/auth/domain/access-token";
+import { AuthenticationFailed } from "@/auth/domain/errors";
+import type { PasswordHasher } from "@/platform/password-hasher";
 import type { IdentityRepository } from "./repository";
-import { RefreshSessionService } from "./refresh-session.service";
+import { RefreshSessionService } from "@/auth/application/refresh-session/refresh-session.service";
 
 export class AuthService {
   constructor(

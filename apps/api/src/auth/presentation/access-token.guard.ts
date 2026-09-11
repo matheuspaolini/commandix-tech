@@ -6,7 +6,10 @@ import {
 } from "@nestjs/common";
 import type { Request } from "express";
 
-import { AccessTokenService, type AccessTokenClaims } from "./access-token";
+import {
+  AccessTokenService,
+  type AccessTokenClaims,
+} from "@/auth/domain/access-token";
 
 export type AuthenticatedRequest = Request & { identity?: AccessTokenClaims };
 

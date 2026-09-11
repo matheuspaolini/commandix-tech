@@ -17,7 +17,7 @@ import {
   AccessTokenGuard,
   type AuthenticatedRequest,
 } from "./access-token.guard";
-import { AuthService } from "./auth.service";
+import { AuthService } from "@/auth/application/sign-in/auth.service";
 import {
   BrowserOriginGuard,
   clearRefreshCookie,
@@ -25,10 +25,10 @@ import {
   setRefreshCookie,
 } from "./browser-auth.http";
 import { CredentialsDto } from "./dto";
-import { AuthenticationFailed } from "./errors";
-import { RefreshSessionService } from "./refresh-session.service";
-import { RuntimeConfig } from "../runtime-config";
-import { InvalidIdentityInput } from "../tenant/tenant.contract";
+import { AuthenticationFailed } from "@/auth/domain/errors";
+import { RefreshSessionService } from "@/auth/application/refresh-session/refresh-session.service";
+import { RuntimeConfig } from "@/runtime-config";
+import { InvalidIdentityInput } from "@/tenant/tenant.contract";
 
 @Controller("auth")
 export class AuthController {

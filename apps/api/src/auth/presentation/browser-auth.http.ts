@@ -6,8 +6,8 @@ import {
 } from "@nestjs/common";
 import type { CookieOptions, Request, Response } from "express";
 
-import { RuntimeConfig } from "../runtime-config";
-import type { IssuedSession } from "./refresh-session.service";
+import { RuntimeConfig } from "@/runtime-config";
+import type { IssuedSession } from "@/auth/application/refresh-session/refresh-session.service";
 
 export const REFRESH_COOKIE = {
   name: "commandix_refresh",

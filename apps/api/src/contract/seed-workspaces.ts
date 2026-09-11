@@ -1,5 +1,5 @@
 import type { PasswordHasher } from "../platform/password-hasher";
-import { canonicalIdentity, type Role } from "../tenant/identity";
+import { canonicalIdentity, type Role } from "../tenant/domain/identity";
 import type { TemplateDefinition } from "./template-definition";
 
 export type SeedUser = { email: string; role: Role };

@@ -1,6 +1,6 @@
 import { Prisma } from "@commandix/database";
 
-import type { Role } from "../tenant/identity";
+import type { Role } from "../tenant/domain/identity";
 import { DatabaseService } from "../database";
 import {
   canonicalTemplateDefinition,
