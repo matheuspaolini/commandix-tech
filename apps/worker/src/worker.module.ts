@@ -1,8 +1,8 @@
 import { DynamicModule, Global, Module } from "@nestjs/common";
-import { NotificationModule } from "./notification/notification.module";
-import { WorkerLifecycle } from "./worker-lifecycle";
-import { OutboxModule } from "./outbox/outbox.module";
-import { WorkerRuntimeConfig } from "./runtime-config";
+import { NotificationModule } from "@/notification/notification.module";
+import { WorkerLifecycle } from "@/worker-lifecycle";
+import { OutboxModule } from "@/outbox/outbox.module";
+import { WorkerRuntimeConfig } from "@/runtime-config";
 
 export function createWorkerModule(config: WorkerRuntimeConfig): DynamicModule {
   @Global()

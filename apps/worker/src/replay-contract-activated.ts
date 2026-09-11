@@ -5,7 +5,7 @@ import {
   parseContractActivatedEvent,
   toContractActivatedEnvelope,
 } from "@commandix/contract-events";
-import { workerRuntimeConfigFromEnvironment } from "./runtime-config";
+import { workerRuntimeConfigFromEnvironment } from "@/runtime-config";
 
 const CONFIRM_TIMEOUT_MS = 5_000;
 

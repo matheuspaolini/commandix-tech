@@ -1,6 +1,6 @@
 import { createPrismaClient, PrismaClient } from "@commandix/database";
 import { Global, Injectable, Module, OnModuleDestroy } from "@nestjs/common";
-import { WorkerRuntimeConfig } from "./runtime-config";
+import { WorkerRuntimeConfig } from "@/runtime-config";
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
