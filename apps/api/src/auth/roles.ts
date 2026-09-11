@@ -8,7 +8,7 @@ import {
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 
-import type { Role } from "../tenant/identity";
+import type { Role } from "../tenant/tenant.contract";
 import type { AuthenticatedRequest } from "./access-token.guard";
 
 export const PERMITTED_ROLES = Symbol("PERMITTED_ROLES");

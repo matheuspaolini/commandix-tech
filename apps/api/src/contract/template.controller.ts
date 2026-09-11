@@ -12,8 +12,8 @@ import {
 import {
   AccessTokenGuard,
   type AuthenticatedRequest,
-} from "../auth/access-token.guard";
-import { Roles, RolesGuard } from "../auth/roles";
+} from "../auth/auth.http-contract";
+import { Roles, RolesGuard } from "../auth/auth.http-contract";
 import { PublicHttpException } from "../errors";
 import { PutActiveTemplateDto } from "./put-active-template.dto";
 import {

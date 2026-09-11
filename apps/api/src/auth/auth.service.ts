@@ -1,7 +1,7 @@
-import { canonicalIdentity, type IdentityInput } from "../tenant/identity";
+import { canonicalIdentity, type IdentityInput } from "../tenant/tenant.contract";
 import type { AccessTokenClaims } from "./access-token";
 import { AuthenticationFailed } from "./errors";
-import type { PasswordHasher } from "./password";
+import type { PasswordHasher } from "../platform/password-hasher";
 import type { IdentityRepository } from "./repository";
 import { RefreshSessionService } from "./refresh-session.service";
 

@@ -16,8 +16,8 @@ import type { Response } from "express";
 import {
   AccessTokenGuard,
   type AuthenticatedRequest,
-} from "../auth/access-token.guard";
-import { Roles, RolesGuard } from "../auth/roles";
+} from "../auth/auth.http-contract";
+import { Roles, RolesGuard } from "../auth/auth.http-contract";
 import { PublicHttpException } from "../errors";
 import { ContractCreationLogger } from "./contract-creation.logger";
 import { InvalidContractValues } from "./contract-values";

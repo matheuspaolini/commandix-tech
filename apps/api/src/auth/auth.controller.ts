@@ -28,7 +28,7 @@ import { CredentialsDto } from "./dto";
 import { AuthenticationFailed } from "./errors";
 import { RefreshSessionService } from "./refresh-session.service";
 import { RuntimeConfig } from "../runtime-config";
-import { InvalidIdentityInput } from "../tenant/identity";
+import { InvalidIdentityInput } from "../tenant/tenant.contract";
 
 @Controller("auth")
 export class AuthController {

@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
 
 import { AuthModule } from "../auth/auth.module";
-import { PASSWORD_HASHER } from "../auth/password";
+import { PASSWORD_HASHER } from "../platform/password-hasher";
 import { OnboardingController } from "./onboarding.controller";
 import { PrismaOnboardingRepository } from "./onboarding.repository";
 import { OnboardingService } from "./onboarding.service";

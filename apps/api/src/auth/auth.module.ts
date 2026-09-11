@@ -6,7 +6,7 @@ import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
 import { AuthLifecycleLogger } from "./auth-lifecycle-logger";
 import { BrowserOriginGuard } from "./browser-auth.http";
-import { BunPasswordHasher, PASSWORD_HASHER } from "./password";
+import { BunPasswordHasher, PASSWORD_HASHER } from "../platform/password-hasher";
 import { PrismaIdentityRepository } from "./prisma-identity.repository";
 import { IDENTITY_REPOSITORY } from "./repository";
 import { PrismaRefreshSessionRepository } from "./prisma-refresh-session.repository";

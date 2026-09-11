@@ -1,4 +1,4 @@
-import type { PasswordHasher } from "../auth/password";
+import type { PasswordHasher } from "../platform/password-hasher";
 import { canonicalIdentity, type IdentityInput } from "./identity";
 import type { OnboardingRepository } from "./onboarding.repository";
 

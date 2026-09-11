@@ -1,4 +1,4 @@
-import type { Role } from "../tenant/identity";
+import type { Role } from "../tenant/tenant.contract";
 
 const BASE64_URL = /^[A-Za-z0-9_-]+$/;
 const TTL_SECONDS = 15 * 60;
