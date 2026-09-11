@@ -2,5 +2,6 @@
 export {
   AccessTokenGuard,
   type AuthenticatedRequest,
-} from "./presentation/access-token.guard";
-export { Roles, RolesGuard } from "./presentation/roles";
+} from "@/auth/presentation/access-token.guard";
+export { Roles, RolesGuard } from "@/auth/presentation/roles";
+export { CredentialsDto } from "@/auth/presentation/dto";

@@ -1,5 +1,5 @@
-import type { ContractValues } from "../contract-values";
-import type { TemplateDefinition } from "../template-definition";
+import type { ContractValues } from "./contract-values";
+import type { TemplateDefinition } from "./template-definition";
 
 export type ContractStatus = "DRAFT" | "ACTIVE" | "CLOSED";
 

@@ -25,7 +25,7 @@
     "generate": "bun run --filter @commandix/database generate",
     "build": "bun run typecheck && bun run --filter @commandix/web build",
     "test": "FORCE_COLOR=1 bun run --filter @commandix/api test && bun run --filter @commandix/worker test && bun run --filter @commandix/web test",
-    "architecture:check": "bun scripts/check-backend-architecture.ts",
+    "architecture:check": "ARCHITECTURE_STRICT=true bun scripts/check-backend-architecture.ts",
     "db:migrate": "bun run --filter @commandix/database migrate",
     "db:seed": "bun run --filter @commandix/api seed",
     "check": "bun run format:check && bun run typecheck && bun run build && bun run test",

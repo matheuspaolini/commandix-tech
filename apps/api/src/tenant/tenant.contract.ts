@@ -4,4 +4,4 @@ export {
   InvalidIdentityInput,
   type IdentityInput,
   type Role,
-} from "./domain/identity";
+} from "@/tenant/domain/identity";

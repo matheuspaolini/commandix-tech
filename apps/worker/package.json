@@ -16,7 +16,7 @@
     "typecheck": "bun --bun tsc -p tsconfig.json",
     "start": "bun src/main.ts",
     "dev": "bun --watch src/main.ts",
-    "test": "bun test ./test",
+    "test": "bun test ./src ./test",
     "replay:contract-activated": "bun src/replay-contract-activated.ts"
   },
   "devDependencies": {

@@ -147,6 +147,8 @@ function classify(file: string): FileInfo {
       layer ??
       (path.split("/").length === 4 ||
       path.endsWith(`/${feature}.module.ts`) ||
+      path.endsWith(".contract.ts") ||
+      path.endsWith("-contract.ts") ||
       feature === "bootstrap"
         ? "bootstrap"
         : "legacy"),
@@ -183,6 +185,18 @@ function isAllowedCrossFeatureImport(
   source: FileInfo,
   target: FileInfo,
 ): boolean {
+  const technicalPlatformFiles = new Set([
+    "apps/api/src/database.ts",
+    "apps/api/src/http.ts",
+    "apps/api/src/errors.ts",
+    "apps/api/src/runtime-config.ts",
+    "apps/worker/src/database.ts",
+  ]);
+  if (
+    technicalPlatformFiles.has(target.path) &&
+    !["domain", "application"].includes(source.layer)
+  )
+    return true;
   if (source.layer === "bootstrap") return true;
   const contracts = new Set([
     "apps/api/src/tenant/tenant.contract.ts",

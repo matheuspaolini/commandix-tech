@@ -6,7 +6,7 @@ import {
   Post,
 } from "@nestjs/common";
 
-import { CredentialsDto } from "@/auth/presentation/dto";
+import { CredentialsDto } from "@/auth/auth.http-contract";
 import { InvalidIdentityInput } from "@/tenant/domain/identity";
 import { DuplicateOnboardingIdentity } from "@/tenant/application/onboarding/onboarding.repository";
 import { OnboardingService } from "@/tenant/application/onboarding/onboarding.service";

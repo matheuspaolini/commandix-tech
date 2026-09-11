@@ -1,9 +1,12 @@
-import { Prisma } from "@commandix/database";
-import { Injectable } from "@nestjs/common";
+import type { IdentityInput, Role } from "@/tenant/domain/identity";
 
-import { DatabaseService } from "@/database";
-import type { CreatedIdentity } from "@/auth/application/sign-in/repository";
-import type { IdentityInput } from "@/tenant/domain/identity";
+export type CreatedOnboardingIdentity = {
+  userId: string;
+  tenantId: string;
+  email: string;
+  role: Role;
+  slug: string;
+};
 
 export class DuplicateOnboardingIdentity extends Error {}
 
@@ -11,57 +14,7 @@ export interface OnboardingRepository {
   createTenantAndAdmin(
     input: Pick<IdentityInput, "slug" | "email">,
     passwordHash: string,
-  ): Promise<CreatedIdentity>;
+  ): Promise<CreatedOnboardingIdentity>;
 }
 
 export const ONBOARDING_REPOSITORY = Symbol("ONBOARDING_REPOSITORY");
-
-@Injectable()
-export class PrismaOnboardingRepository implements OnboardingRepository {
-  constructor(private readonly database: DatabaseService) {}
-
-  async createTenantAndAdmin(
-    input: Pick<IdentityInput, "slug" | "email">,
-    passwordHash: string,
-  ): Promise<CreatedIdentity> {
-    try {
-      return await this.database.client.$transaction(async (transaction) => {
-        const tenant = await this.createTenant(transaction, input.slug);
-        const user = await this.createAdmin(transaction, {
-          tenantId: tenant.id,
-          email: input.email,
-          passwordHash,
-        });
-        return {
-          userId: user.id,
-          tenantId: tenant.id,
-          email: user.email,
-          role: user.role,
-          slug: tenant.slug,
-        };
-      });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === "P2002"
-      ) {
-        throw new DuplicateOnboardingIdentity();
-      }
-      throw error;
-    }
-  }
-
-  protected async createTenant(
-    transaction: Prisma.TransactionClient,
-    slug: string,
-  ) {
-    return transaction.tenant.create({ data: { slug } });
-  }
-
-  protected async createAdmin(
-    transaction: Prisma.TransactionClient,
-    data: { tenantId: string; email: string; passwordHash: string },
-  ) {
-    return transaction.user.create({ data: { ...data, role: "ADMIN" } });
-  }
-}
