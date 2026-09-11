@@ -4,9 +4,9 @@ import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { createApp } from "@/app";
 import {
-  CONTRACT_MUTATION_TRANSACTIONS,
-  type ContractMutationTransactions,
-} from "@/contract/application/edit-draft-values/contract-mutation";
+  DRAFT_EDIT_TRANSACTIONS,
+  type DraftEditTransactions,
+} from "@/contract/application/edit-draft-values/draft-edit-transaction";
 
 Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
 Bun.env.AUTH_ALLOWED_ORIGINS ??= "http://localhost:8080";
@@ -610,8 +610,8 @@ describe("PUT /contracts/:id/values", () => {
     const actor = await client.user.findFirstOrThrow({
       where: { tenantId: before.tenantId, role: "ADMIN" },
     });
-    const transactions = app.get<ContractMutationTransactions>(
-      CONTRACT_MUTATION_TRANSACTIONS,
+    const transactions = app.get<DraftEditTransactions>(
+      DRAFT_EDIT_TRANSACTIONS,
     );
     const failure = await transactions
       .run(async (transaction) => {

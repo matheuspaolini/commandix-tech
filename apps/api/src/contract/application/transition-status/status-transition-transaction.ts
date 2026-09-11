@@ -2,14 +2,12 @@ import {
   CONTRACT_ACTIVATED_EVENT_TYPE,
   CONTRACT_ACTIVATED_SCHEMA_VERSION,
 } from "@commandix/contract-events";
+import type { ContractDetail } from "@/contract/application/read-contract-detail/read-contract-detail";
 import type { ContractSnapshot } from "@/contract/domain/contract-snapshot";
 import type { ContractValues } from "@/contract/domain/contract-values";
-import type {
-  ContractDetail,
-  ContractStatus,
-} from "@/contract/application/read-contract-detail/read-contract-detail";
+import type { ContractStatus } from "@/contract/domain/entities";
 
-export type LockedContract = {
+export type LockedStatusTransitionContract = {
   id: string;
   tenantId: string;
   status: ContractStatus;
@@ -18,7 +16,7 @@ export type LockedContract = {
   templateVersion: ContractDetail["templateVersion"];
 };
 
-type HistoryPersistence<Action extends "ACTIVATED" | "CLOSED" | "EDITED"> = {
+type HistoryPersistence<Action extends "ACTIVATED" | "CLOSED"> = {
   id: string;
   tenantId: string;
   contractId: string;
@@ -61,32 +59,21 @@ export type ClosurePersistence = {
   history: HistoryPersistence<"CLOSED">;
 };
 
-export type DraftEditPersistence = {
-  contract: {
-    id: string;
-    tenantId: string;
-    revision: number;
-    values: ContractValues;
-  };
-  history: HistoryPersistence<"EDITED">;
-};
-
-export interface ContractMutationTransaction {
+export interface StatusTransitionTransaction {
   findForUpdate(input: {
     tenantId: string;
     contractId: string;
-  }): Promise<LockedContract | null>;
+  }): Promise<LockedStatusTransitionContract | null>;
   persistActivation(input: ActivationPersistence): Promise<void>;
   persistClosure(input: ClosurePersistence): Promise<void>;
-  persistDraftEdit(input: DraftEditPersistence): Promise<void>;
 }
 
-export interface ContractMutationTransactions {
+export interface StatusTransitionTransactions {
   run<T>(
-    operation: (transaction: ContractMutationTransaction) => Promise<T>,
+    operation: (transaction: StatusTransitionTransaction) => Promise<T>,
   ): Promise<T>;
 }
 
-export const CONTRACT_MUTATION_TRANSACTIONS = Symbol(
-  "CONTRACT_MUTATION_TRANSACTIONS",
+export const STATUS_TRANSITION_TRANSACTIONS = Symbol(
+  "STATUS_TRANSITION_TRANSACTIONS",
 );

@@ -1,4 +1,4 @@
-import type { ContractMutationTransactions } from "@/contract/application/edit-draft-values/contract-mutation";
+import type { DraftEditTransactions } from "@/contract/application/edit-draft-values/draft-edit-transaction";
 import {
   ContractNotFound,
   ContractRevisionConflict,
@@ -13,6 +13,8 @@ import type { ContractDetail } from "@/contract/application/read-contract-detail
 import {
   ContractEntity,
   ContractIdentifier,
+  HistoryEntity,
+  HistoryIdentifier,
   TemplateVersionIdentifier,
   TenantIdentifier,
 } from "@/contract/domain/entities";
@@ -45,7 +47,7 @@ const UUIDS: EditIdGenerator = { next: () => crypto.randomUUID() };
 
 export class EditDraftValues {
   constructor(
-    private readonly transactions: ContractMutationTransactions,
+    private readonly transactions: DraftEditTransactions,
     private readonly clock: EditClock = SYSTEM_CLOCK,
     private readonly ids: EditIdGenerator = UUIDS,
   ) {}
@@ -84,6 +86,12 @@ export class EditDraftValues {
       }).withDraftValues(values);
       const revision = next.revision;
       const occurredAt = this.clock.now();
+      const history = HistoryEntity.create({
+        id: HistoryIdentifier.from(this.ids.next()),
+        tenantId: TenantIdentifier.from(current.tenantId),
+        contractId: ContractIdentifier.from(current.id),
+        revision,
+      }).envelope();
       const before: ContractSnapshot = {
         status: current.status,
         revision: current.revision,
@@ -100,9 +108,7 @@ export class EditDraftValues {
           values,
         },
         history: {
-          id: this.ids.next(),
-          tenantId: current.tenantId,
-          contractId: current.id,
+          ...history,
           actorId: command.actorId,
           action: "EDITED",
           revision,

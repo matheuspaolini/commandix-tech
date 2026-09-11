@@ -19,9 +19,13 @@ import {
   ReadContractDetail,
 } from "@/contract/application/read-contract-detail/read-contract-detail";
 import { ContractTransitionLogger } from "@/contract/presentation/contract-transition.logger";
-import { PrismaContractMutationTransactions } from "@/contract/infrastructure/prisma-contract-transition";
+import {
+  PrismaContractDraftEditTransactions,
+  PrismaContractStatusTransitionTransactions,
+} from "@/contract/infrastructure/prisma-contract-transition";
 import { TransitionStatus } from "@/contract/application/transition-status/transition-status";
-import { CONTRACT_MUTATION_TRANSACTIONS } from "@/contract/application/edit-draft-values/contract-mutation";
+import { DRAFT_EDIT_TRANSACTIONS } from "@/contract/application/edit-draft-values/draft-edit-transaction";
+import { STATUS_TRANSITION_TRANSACTIONS } from "@/contract/application/transition-status/status-transition-transaction";
 import { EditDraftValues } from "@/contract/application/edit-draft-values/edit-draft-values";
 import { PrismaContractRegisterRepository } from "@/contract/infrastructure/prisma-contract-register.repository";
 import {
@@ -48,25 +52,30 @@ import { TemplatePublicationLogger } from "@/contract/presentation/template-publ
     ContractCreationLogger,
     ContractTransitionLogger,
     TemplatePublicationLogger,
-    PrismaContractMutationTransactions,
+    PrismaContractDraftEditTransactions,
+    PrismaContractStatusTransitionTransactions,
     PrismaContractCreationTransactions,
     PrismaTemplatePublicationTransactions,
     PrismaContractDetailRepository,
     PrismaContractRegisterRepository,
     PrismaContractHistoryRepository,
     {
-      provide: CONTRACT_MUTATION_TRANSACTIONS,
-      useExisting: PrismaContractMutationTransactions,
+      provide: DRAFT_EDIT_TRANSACTIONS,
+      useExisting: PrismaContractDraftEditTransactions,
+    },
+    {
+      provide: STATUS_TRANSITION_TRANSACTIONS,
+      useExisting: PrismaContractStatusTransitionTransactions,
     },
     {
       provide: TransitionStatus,
       useFactory: (transactions) => new TransitionStatus(transactions),
-      inject: [CONTRACT_MUTATION_TRANSACTIONS],
+      inject: [STATUS_TRANSITION_TRANSACTIONS],
     },
     {
       provide: EditDraftValues,
       useFactory: (transactions) => new EditDraftValues(transactions),
-      inject: [CONTRACT_MUTATION_TRANSACTIONS],
+      inject: [DRAFT_EDIT_TRANSACTIONS],
     },
     {
       provide: CONTRACT_CREATION_TRANSACTIONS,

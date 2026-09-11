@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
 import type {
-  ContractMutationTransaction,
-  LockedContract,
-} from "@/contract/application/edit-draft-values/contract-mutation";
+  DraftEditTransaction,
+  LockedDraftContract,
+} from "@/contract/application/edit-draft-values/draft-edit-transaction";
 import {
   EditDraftValues,
   ContractRevisionConflict,
@@ -31,12 +31,10 @@ const DRAFT = {
 };
 
 function transactionFor(
-  contract: LockedContract = DRAFT,
-): ContractMutationTransaction & { persisted?: unknown } {
-  const transaction: ContractMutationTransaction & { persisted?: unknown } = {
+  contract: LockedDraftContract = DRAFT,
+): DraftEditTransaction & { persisted?: unknown } {
+  const transaction: DraftEditTransaction & { persisted?: unknown } = {
     findForUpdate: async () => contract,
-    persistActivation: async () => {},
-    persistClosure: async () => {},
     persistDraftEdit: async (input) => {
       transaction.persisted = input;
     },

@@ -4,7 +4,14 @@ import {
   ContractEntity,
   ContractIdentifier,
   ContractStatusConflict,
+  ActivationOutboxEventEntity,
+  ActivationOutboxEventIdentifier,
   TemplateVersionIdentifier,
+  TemplateVersionEntity,
+  LogicalTemplateEntity,
+  LogicalTemplateIdentifier,
+  HistoryEntity,
+  HistoryIdentifier,
   TenantIdentifier,
 } from "./entities";
 
@@ -38,5 +45,58 @@ test("reconstituted Contract only advances through its lifecycle", () => {
       values: { approved: false },
     },
     invalid: true,
+  });
+});
+
+test("creates and advances Contract collaborators with controlled identities", () => {
+  const tenantId = TenantIdentifier.from("tenant-id");
+  const version = TemplateVersionEntity.create({
+    id: TemplateVersionIdentifier.from("version-id"),
+    logicalTemplateId: LogicalTemplateIdentifier.from("template-id"),
+    tenantId,
+    definition: {
+      fields: [{ key: "title", label: "Title", type: "text", required: true }],
+    },
+  });
+  const template = LogicalTemplateEntity.create({
+    id: version.logicalTemplateId,
+    tenantId,
+    activeVersionId: version.id,
+  });
+
+  expect({
+    published: template
+      .publish(TemplateVersionIdentifier.from("next-version-id"))
+      .activeTemplate(),
+    history: HistoryEntity.create({
+      id: HistoryIdentifier.from("history-id"),
+      tenantId,
+      contractId: ContractIdentifier.from("contract-id"),
+      revision: 2,
+    }).envelope(),
+    activation: ActivationOutboxEventEntity.create({
+      eventId: ActivationOutboxEventIdentifier.from("event-id"),
+      tenantId,
+      contractId: ContractIdentifier.from("contract-id"),
+      activationRevision: 2,
+    }).activation(),
+  }).toStrictEqual({
+    published: {
+      logicalTemplateId: "template-id",
+      templateVersionId: "next-version-id",
+      revision: 2,
+    },
+    history: {
+      id: "history-id",
+      tenantId: "tenant-id",
+      contractId: "contract-id",
+      revision: 2,
+    },
+    activation: {
+      eventId: "event-id",
+      tenantId: "tenant-id",
+      contractId: "contract-id",
+      activationRevision: 2,
+    },
   });
 });

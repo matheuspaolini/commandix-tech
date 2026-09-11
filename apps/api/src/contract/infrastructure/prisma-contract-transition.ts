@@ -3,68 +3,31 @@ import { Injectable } from "@nestjs/common";
 import { DatabaseService } from "@/database";
 import { canonicalTemplateDefinition } from "@/contract/domain/template-definition";
 import type {
+  DraftEditPersistence,
+  DraftEditTransaction,
+  DraftEditTransactions,
+  LockedDraftContract,
+} from "@/contract/application/edit-draft-values/draft-edit-transaction";
+import type {
   ActivationPersistence,
   ClosurePersistence,
-  ContractMutationTransaction,
-  ContractMutationTransactions,
-  DraftEditPersistence,
-  LockedContract,
-} from "@/contract/application/edit-draft-values/contract-mutation";
+  LockedStatusTransitionContract,
+  StatusTransitionTransaction,
+  StatusTransitionTransactions,
+} from "@/contract/application/transition-status/status-transition-transaction";
 
 type TransactionClient = Parameters<
   Parameters<PrismaClient["$transaction"]>[0]
 >[0];
 
-class PrismaContractMutationTransaction implements ContractMutationTransaction {
+class PrismaDraftEditTransaction implements DraftEditTransaction {
   constructor(private readonly transaction: TransactionClient) {}
 
   async findForUpdate(input: {
     tenantId: string;
     contractId: string;
-  }): Promise<LockedContract | null> {
-    const rows = await this.transaction.$queryRaw<
-      Array<{
-        id: string;
-        tenant_id: string;
-        status: "DRAFT" | "ACTIVE" | "CLOSED";
-        revision: number;
-        values: Prisma.JsonValue;
-        template_version_id: string;
-        definition: Prisma.JsonValue;
-      }>
-    >`SELECT c."id", c."tenant_id", c."status", c."revision", c."values",
-        c."template_version_id", tv."definition"
-      FROM "contracts" c
-      JOIN "template_versions" tv
-        ON tv."id" = c."template_version_id" AND tv."tenant_id" = c."tenant_id"
-      WHERE c."id" = ${input.contractId}::uuid AND c."tenant_id" = ${input.tenantId}::uuid
-      FOR UPDATE OF c`;
-    const row = rows[0];
-    if (!row) return null;
-    return {
-      id: row.id,
-      tenantId: row.tenant_id,
-      status: row.status,
-      revision: row.revision,
-      values: row.values as LockedContract["values"],
-      templateVersion: {
-        id: row.template_version_id,
-        fields: canonicalTemplateDefinition(row.definition).fields,
-      },
-    };
-  }
-
-  async persistActivation(input: ActivationPersistence): Promise<void> {
-    await this.persistContract(input.contract);
-    await this.persistHistory(input.history);
-    await this.transaction.contractActivationOutbox.create({
-      data: input.event,
-    });
-  }
-
-  async persistClosure(input: ClosurePersistence): Promise<void> {
-    await this.persistContract(input.contract);
-    await this.persistHistory(input.history);
+  }): Promise<LockedDraftContract | null> {
+    return findLockedContract(this.transaction, input);
   }
 
   async persistDraftEdit(input: DraftEditPersistence): Promise<void> {
@@ -75,55 +38,132 @@ class PrismaContractMutationTransaction implements ContractMutationTransaction {
         revision: input.contract.revision,
       },
     });
-    await this.persistHistory(input.history);
+    await persistHistory(this.transaction, input.history);
+  }
+}
+
+class PrismaStatusTransitionTransaction implements StatusTransitionTransaction {
+  constructor(private readonly transaction: TransactionClient) {}
+
+  async findForUpdate(input: {
+    tenantId: string;
+    contractId: string;
+  }): Promise<LockedStatusTransitionContract | null> {
+    return findLockedContract(this.transaction, input);
   }
 
-  private async persistContract(input: {
+  async persistActivation(input: ActivationPersistence): Promise<void> {
+    await persistContract(this.transaction, input.contract);
+    await persistHistory(this.transaction, input.history);
+    await this.transaction.contractActivationOutbox.create({
+      data: input.event,
+    });
+  }
+
+  async persistClosure(input: ClosurePersistence): Promise<void> {
+    await persistContract(this.transaction, input.contract);
+    await persistHistory(this.transaction, input.history);
+  }
+}
+
+async function persistContract(
+  transaction: TransactionClient,
+  input: {
     id: string;
     tenantId: string;
     status: "ACTIVE" | "CLOSED";
     revision: number;
-  }): Promise<void> {
-    await this.transaction.contract.update({
-      where: { id: input.id, tenantId: input.tenantId },
-      data: {
-        status: input.status,
-        revision: input.revision,
-      },
-    });
-  }
+  },
+): Promise<void> {
+  await transaction.contract.update({
+    where: { id: input.id, tenantId: input.tenantId },
+    data: {
+      status: input.status,
+      revision: input.revision,
+    },
+  });
+}
 
-  private async persistHistory(
-    input:
-      | ActivationPersistence["history"]
-      | ClosurePersistence["history"]
-      | DraftEditPersistence["history"],
-  ): Promise<void> {
-    await this.transaction.contractHistory.create({
-      data: {
-        id: input.id,
-        tenantId: input.tenantId,
-        contractId: input.contractId,
-        actorId: input.actorId,
-        action: input.action,
-        revision: input.revision,
-        occurredAt: input.occurredAt,
-        beforeSnapshot: input.before as Prisma.InputJsonValue,
-        afterSnapshot: input.after as Prisma.InputJsonValue,
-      },
-    });
+async function persistHistory(
+  transaction: TransactionClient,
+  input:
+    | ActivationPersistence["history"]
+    | ClosurePersistence["history"]
+    | DraftEditPersistence["history"],
+): Promise<void> {
+  await transaction.contractHistory.create({
+    data: {
+      id: input.id,
+      tenantId: input.tenantId,
+      contractId: input.contractId,
+      actorId: input.actorId,
+      action: input.action,
+      revision: input.revision,
+      occurredAt: input.occurredAt,
+      beforeSnapshot: input.before as Prisma.InputJsonValue,
+      afterSnapshot: input.after as Prisma.InputJsonValue,
+    },
+  });
+}
+
+@Injectable()
+export class PrismaContractDraftEditTransactions implements DraftEditTransactions {
+  constructor(private readonly database: DatabaseService) {}
+
+  run<T>(
+    operation: (transaction: DraftEditTransaction) => Promise<T>,
+  ): Promise<T> {
+    return this.database.client.$transaction((transaction) =>
+      operation(new PrismaDraftEditTransaction(transaction)),
+    );
   }
 }
 
 @Injectable()
-export class PrismaContractMutationTransactions implements ContractMutationTransactions {
+export class PrismaContractStatusTransitionTransactions implements StatusTransitionTransactions {
   constructor(private readonly database: DatabaseService) {}
 
   run<T>(
-    operation: (transaction: ContractMutationTransaction) => Promise<T>,
+    operation: (transaction: StatusTransitionTransaction) => Promise<T>,
   ): Promise<T> {
     return this.database.client.$transaction((transaction) =>
-      operation(new PrismaContractMutationTransaction(transaction)),
+      operation(new PrismaStatusTransitionTransaction(transaction)),
     );
   }
+}
+
+async function findLockedContract(
+  transaction: TransactionClient,
+  input: { tenantId: string; contractId: string },
+): Promise<LockedStatusTransitionContract | null> {
+  const rows = await transaction.$queryRaw<
+    Array<{
+      id: string;
+      tenant_id: string;
+      status: "DRAFT" | "ACTIVE" | "CLOSED";
+      revision: number;
+      values: Prisma.JsonValue;
+      template_version_id: string;
+      definition: Prisma.JsonValue;
+    }>
+  >`SELECT c."id", c."tenant_id", c."status", c."revision", c."values",
+      c."template_version_id", tv."definition"
+    FROM "contracts" c
+    JOIN "template_versions" tv
+      ON tv."id" = c."template_version_id" AND tv."tenant_id" = c."tenant_id"
+    WHERE c."id" = ${input.contractId}::uuid AND c."tenant_id" = ${input.tenantId}::uuid
+    FOR UPDATE OF c`;
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    id: row.id,
+    tenantId: row.tenant_id,
+    status: row.status,
+    revision: row.revision,
+    values: row.values as LockedStatusTransitionContract["values"],
+    templateVersion: {
+      id: row.template_version_id,
+      fields: canonicalTemplateDefinition(row.definition).fields,
+    },
+  };
 }

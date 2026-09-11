@@ -156,6 +156,19 @@ export class LogicalTemplateEntity {
     readonly activeVersionId: TemplateVersionIdentifier,
   ) {}
 
+  static create(input: {
+    id: LogicalTemplateIdentifier;
+    tenantId: TenantIdentifier;
+    activeVersionId: TemplateVersionIdentifier;
+  }): LogicalTemplateEntity {
+    return new LogicalTemplateEntity(
+      input.id,
+      input.tenantId,
+      1,
+      input.activeVersionId,
+    );
+  }
+
   static reconstitute(input: {
     id: LogicalTemplateIdentifier;
     tenantId: TenantIdentifier;
@@ -169,6 +182,27 @@ export class LogicalTemplateEntity {
       input.activeVersionId,
     );
   }
+
+  publish(versionId: TemplateVersionIdentifier): LogicalTemplateEntity {
+    return new LogicalTemplateEntity(
+      this.id,
+      this.tenantId,
+      this.revision + 1,
+      versionId,
+    );
+  }
+
+  activeTemplate(): {
+    logicalTemplateId: string;
+    templateVersionId: string;
+    revision: number;
+  } {
+    return {
+      logicalTemplateId: this.id.value,
+      templateVersionId: this.activeVersionId.value,
+      revision: this.revision,
+    };
+  }
 }
 
 export class TemplateVersionEntity {
@@ -178,6 +212,20 @@ export class TemplateVersionEntity {
     readonly tenantId: TenantIdentifier,
     readonly definition: TemplateDefinition,
   ) {}
+
+  static create(input: {
+    id: TemplateVersionIdentifier;
+    logicalTemplateId: LogicalTemplateIdentifier;
+    tenantId: TenantIdentifier;
+    definition: TemplateDefinition;
+  }): TemplateVersionEntity {
+    return new TemplateVersionEntity(
+      input.id,
+      input.logicalTemplateId,
+      input.tenantId,
+      input.definition,
+    );
+  }
 
   static reconstitute(input: {
     id: TemplateVersionIdentifier;
@@ -192,6 +240,10 @@ export class TemplateVersionEntity {
       input.definition,
     );
   }
+
+  definitionForPresentation(): TemplateDefinition {
+    return this.definition;
+  }
 }
 
 export class HistoryEntity {
@@ -201,6 +253,20 @@ export class HistoryEntity {
     readonly contractId: ContractIdentifier,
     readonly revision: number,
   ) {}
+
+  static create(input: {
+    id: HistoryIdentifier;
+    tenantId: TenantIdentifier;
+    contractId: ContractIdentifier;
+    revision: number;
+  }): HistoryEntity {
+    return new HistoryEntity(
+      input.id,
+      input.tenantId,
+      input.contractId,
+      input.revision,
+    );
+  }
 
   static reconstitute(input: {
     id: HistoryIdentifier;
@@ -215,6 +281,20 @@ export class HistoryEntity {
       input.revision,
     );
   }
+
+  envelope(): {
+    id: string;
+    tenantId: string;
+    contractId: string;
+    revision: number;
+  } {
+    return {
+      id: this.id.value,
+      tenantId: this.tenantId.value,
+      contractId: this.contractId.value,
+      revision: this.revision,
+    };
+  }
 }
 
 export class ActivationOutboxEventEntity {
@@ -224,6 +304,20 @@ export class ActivationOutboxEventEntity {
     readonly contractId: ContractIdentifier,
     readonly activationRevision: number,
   ) {}
+
+  static create(input: {
+    eventId: ActivationOutboxEventIdentifier;
+    tenantId: TenantIdentifier;
+    contractId: ContractIdentifier;
+    activationRevision: number;
+  }): ActivationOutboxEventEntity {
+    return new ActivationOutboxEventEntity(
+      input.eventId,
+      input.tenantId,
+      input.contractId,
+      input.activationRevision,
+    );
+  }
 
   static reconstitute(input: {
     eventId: ActivationOutboxEventIdentifier;
@@ -237,5 +331,19 @@ export class ActivationOutboxEventEntity {
       input.contractId,
       input.activationRevision,
     );
+  }
+
+  activation(): {
+    eventId: string;
+    tenantId: string;
+    contractId: string;
+    activationRevision: number;
+  } {
+    return {
+      eventId: this.eventId.value,
+      tenantId: this.tenantId.value,
+      contractId: this.contractId.value,
+      activationRevision: this.activationRevision,
+    };
   }
 }

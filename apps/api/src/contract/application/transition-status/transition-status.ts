@@ -2,11 +2,15 @@ import {
   CONTRACT_ACTIVATED_EVENT_TYPE,
   CONTRACT_ACTIVATED_SCHEMA_VERSION,
 } from "@commandix/contract-events";
-import type { ContractMutationTransactions } from "@/contract/application/edit-draft-values/contract-mutation";
+import type { StatusTransitionTransactions } from "@/contract/application/transition-status/status-transition-transaction";
 import type { ContractSnapshot } from "@/contract/domain/contract-snapshot";
 import {
   ContractEntity,
   ContractIdentifier,
+  ActivationOutboxEventEntity,
+  ActivationOutboxEventIdentifier,
+  HistoryEntity,
+  HistoryIdentifier,
   TemplateVersionIdentifier,
   TenantIdentifier,
 } from "@/contract/domain/entities";
@@ -74,7 +78,7 @@ const UUIDS: TransitionIdGenerator = { next: () => crypto.randomUUID() };
 
 export class TransitionStatus {
   constructor(
-    private readonly transactions: ContractMutationTransactions,
+    private readonly transactions: StatusTransitionTransactions,
     private readonly clock: TransitionClock = SYSTEM_CLOCK,
     private readonly ids: TransitionIdGenerator = UUIDS,
   ) {}
@@ -98,7 +102,12 @@ export class TransitionStatus {
       const status = next.status;
       const revision = next.revision;
       const occurredAt = this.clock.now();
-      const historyId = this.ids.next();
+      const history = HistoryEntity.create({
+        id: HistoryIdentifier.from(this.ids.next()),
+        tenantId: TenantIdentifier.from(current.tenantId),
+        contractId: ContractIdentifier.from(current.id),
+        revision,
+      }).envelope();
       const before: ContractSnapshot = {
         status: current.status,
         revision: current.revision,
@@ -114,10 +123,8 @@ export class TransitionStatus {
         values: current.values,
         templateVersion: current.templateVersion,
       };
-      const history = {
-        id: historyId,
-        tenantId: current.tenantId,
-        contractId: current.id,
+      const historyPersistence = {
+        ...history,
         actorId: command.actorId,
         revision,
         occurredAt,
@@ -133,14 +140,19 @@ export class TransitionStatus {
             status,
             revision,
           },
-          history: { ...history, action: "CLOSED" },
+          history: { ...historyPersistence, action: "CLOSED" },
         });
         return { targetStatus: "CLOSED", contract };
       }
       if (status !== "ACTIVE")
         throw new Error("Contract transition produced an invalid target");
 
-      const eventId = this.ids.next();
+      const event = ActivationOutboxEventEntity.create({
+        eventId: ActivationOutboxEventIdentifier.from(this.ids.next()),
+        tenantId: TenantIdentifier.from(current.tenantId),
+        contractId: ContractIdentifier.from(current.id),
+        activationRevision: revision,
+      }).activation();
       await transaction.persistActivation({
         contract: {
           id: current.id,
@@ -148,21 +160,18 @@ export class TransitionStatus {
           status,
           revision,
         },
-        history: { ...history, action: "ACTIVATED" },
+        history: { ...historyPersistence, action: "ACTIVATED" },
         event: {
-          eventId,
+          ...event,
           eventType: CONTRACT_ACTIVATED_EVENT_TYPE,
           schemaVersion: CONTRACT_ACTIVATED_SCHEMA_VERSION,
-          tenantId: current.tenantId,
-          contractId: current.id,
-          activationRevision: revision,
           occurredAt,
           correlationId: command.correlationId,
           nextAttemptAt: occurredAt,
         },
       });
 
-      return { targetStatus: "ACTIVE", contract, eventId };
+      return { targetStatus: "ACTIVE", contract, eventId: event.eventId };
     });
   }
 }
