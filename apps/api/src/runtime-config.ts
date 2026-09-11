@@ -1,4 +1,4 @@
-import { Global, Module } from "@nestjs/common";
+import { DynamicModule, Global, Module } from "@nestjs/common";
 
 const MINIMUM_JWT_SECRET_LENGTH = 32;
 
@@ -95,10 +95,6 @@ function parseOrigin(value: string): string {
   return url.origin;
 }
 
-export function jwtSecretFromEnvironment(): string {
-  return requiredSecret(Bun.env.JWT_SECRET);
-}
-
 function requiredValue(
   value: string | undefined,
   variableName: string,
@@ -122,12 +118,14 @@ function requiredSecret(value: string | undefined): string {
 
 @Global()
 @Module({
-  providers: [
-    {
-      provide: RuntimeConfig,
-      useFactory: runtimeConfigFromEnvironment,
-    },
-  ],
   exports: [RuntimeConfig],
 })
-export class RuntimeConfigModule {}
+export class RuntimeConfigModule {
+  static register(config: RuntimeConfig): DynamicModule {
+    return {
+      module: RuntimeConfigModule,
+      providers: [{ provide: RuntimeConfig, useValue: config }],
+      exports: [RuntimeConfig],
+    };
+  }
+}

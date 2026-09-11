@@ -1,5 +1,4 @@
 import type { Role } from "../tenant/identity";
-import { jwtSecretFromEnvironment } from "../runtime-config";
 
 const BASE64_URL = /^[A-Za-z0-9_-]+$/;
 const TTL_SECONDS = 15 * 60;
@@ -186,7 +185,7 @@ export class AccessTokenService {
   private readonly signer: JwtSigner;
 
   constructor(
-    secret = jwtSecretFromEnvironment(),
+    secret: string,
     private readonly clock: Clock = SYSTEM_CLOCK,
   ) {
     assertValidSecret(secret);

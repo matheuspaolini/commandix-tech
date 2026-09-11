@@ -4,7 +4,9 @@ import { CreateContract } from "../src/contract/create-contract";
 import { PrismaContractCreationTransactions } from "../src/contract/prisma-contract-creation";
 import type { DatabaseService } from "../src/database";
 
-const client = createPrismaClient();
+const client = createPrismaClient({
+  datasourceUrl: Bun.env.TEST_DATABASE_URL ?? Bun.env.DATABASE_URL ?? "",
+});
 let acmeTenantId: string;
 let globexVersionId: string;
 let acmeActorId: string;

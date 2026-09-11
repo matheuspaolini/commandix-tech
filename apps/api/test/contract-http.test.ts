@@ -13,7 +13,9 @@ Bun.env.AUTH_ALLOWED_ORIGINS ??= "http://localhost:8080";
 Bun.env.AUTH_COOKIE_SECURE ??= "false";
 
 const PASSWORD = "Commandix-demo-2026!";
-const client = createPrismaClient();
+const client = createPrismaClient({
+  datasourceUrl: Bun.env.TEST_DATABASE_URL ?? Bun.env.DATABASE_URL ?? "",
+});
 const testDatabaseUrl = Bun.env.TEST_DATABASE_URL;
 const cleanupClient = testDatabaseUrl
   ? new PrismaClient({ datasourceUrl: testDatabaseUrl })

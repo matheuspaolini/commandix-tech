@@ -9,7 +9,9 @@ Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
 Bun.env.AUTH_ALLOWED_ORIGINS ??= "http://localhost:8080";
 Bun.env.AUTH_COOKIE_SECURE ??= "false";
 
-const client = createPrismaClient();
+const client = createPrismaClient({
+  datasourceUrl: Bun.env.TEST_DATABASE_URL ?? Bun.env.DATABASE_URL ?? "",
+});
 const slug = `refresh-${Bun.randomUUIDv7().replaceAll("-", "")}`;
 const credentials = {
   slug,

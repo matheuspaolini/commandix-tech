@@ -6,7 +6,9 @@ import { PrismaSeedWorkspaceRepository } from "../src/contract/prisma-seed-works
 import { PutActiveTemplate } from "../src/contract/template-publication";
 import type { DatabaseService } from "../src/database";
 
-const client = createPrismaClient();
+const client = createPrismaClient({
+  datasourceUrl: Bun.env.TEST_DATABASE_URL ?? Bun.env.DATABASE_URL ?? "",
+});
 const cleanupClient = Bun.env.TEST_DATABASE_URL
   ? new PrismaClient({ datasourceUrl: Bun.env.TEST_DATABASE_URL })
   : null;

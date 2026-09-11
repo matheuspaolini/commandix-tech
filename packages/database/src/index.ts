@@ -7,6 +7,10 @@ export {
   UserRole,
 } from "@prisma/client";
 
-export function createPrismaClient() {
-  return new PrismaClient();
+export type PrismaClientConfiguration = { datasourceUrl: string };
+
+export function createPrismaClient({
+  datasourceUrl,
+}: PrismaClientConfiguration): PrismaClient {
+  return new PrismaClient({ datasourceUrl });
 }

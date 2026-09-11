@@ -5,6 +5,7 @@ import request from "supertest";
 
 import { createApp } from "../src/app";
 import { DatabaseService } from "../src/database";
+import { runtimeConfigFromEnvironment } from "../src/runtime-config";
 import { PrismaOnboardingRepository } from "../src/tenant/onboarding.repository";
 
 Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
@@ -20,7 +21,9 @@ const DEFAULT_ONBOARDING_INPUT = {
   password: PASSWORD,
 } as const;
 
-const client = createPrismaClient();
+const client = createPrismaClient({
+  datasourceUrl: Bun.env.TEST_DATABASE_URL ?? Bun.env.DATABASE_URL ?? "",
+});
 const createdTenantSlugs: string[] = [];
 let app: INestApplication;
 
@@ -193,7 +196,7 @@ async function createConcurrentOnboardingScenario() {
 
 async function createRollbackScenario() {
   const tenantSlug = createTenantSlug();
-  const database = new DatabaseService();
+  const database = new DatabaseService(runtimeConfigFromEnvironment());
   const repository = new FailingAdminRepository(database);
   let rejected = false;
 

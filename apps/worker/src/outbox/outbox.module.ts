@@ -1,6 +1,6 @@
 import { Module } from "@nestjs/common";
 import { DatabaseModule } from "../database";
-import { workerRuntimeConfigFromEnvironment } from "../runtime-config";
+import { WorkerRuntimeConfig } from "../runtime-config";
 import { OutboxPublisher } from "./outbox.publisher";
 import { PrismaActivationOutboxRepository } from "./prisma-activation-outbox.repository";
 import {
@@ -17,8 +17,8 @@ const CONTRACT_EVENT_PUBLISHER = Symbol("CONTRACT_EVENT_PUBLISHER");
     PrismaActivationOutboxRepository,
     {
       provide: CONTRACT_EVENT_PUBLISHER,
-      useFactory: () => {
-        const config = workerRuntimeConfigFromEnvironment();
+      inject: [WorkerRuntimeConfig],
+      useFactory: (config: WorkerRuntimeConfig) => {
         return new RabbitMqContractEventPublisher(
           config.rabbitMqUrl,
           config.outboxPublishConfirmTimeoutMs,

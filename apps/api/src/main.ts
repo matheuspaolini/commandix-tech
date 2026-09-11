@@ -1,4 +1,5 @@
-import { createApp } from "./app";
+import { createApiModule, createApp } from "./app";
+import { runtimeConfigFromEnvironment } from "./runtime-config";
 
 const API_SERVER = {
   host: "0.0.0.0",
@@ -15,7 +16,9 @@ const API_START_FAILED_EVENT = {
 } as const;
 
 async function bootstrap(): Promise<void> {
-  const app = await createApp();
+  const app = await createApp({
+    rootModule: createApiModule(runtimeConfigFromEnvironment()),
+  });
 
   app.enableShutdownHooks();
   await app.listen(API_SERVER.port, API_SERVER.host);

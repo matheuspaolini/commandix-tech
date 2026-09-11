@@ -9,7 +9,9 @@ import {
   EventIdentityConflictError,
 } from "../src/notification/process-contract-activated-event";
 
-const client = createPrismaClient();
+const client = createPrismaClient({
+  datasourceUrl: Bun.env.TEST_DATABASE_URL ?? Bun.env.DATABASE_URL ?? "",
+});
 const repository = new PrismaActivationNotificationRepository({
   client,
 } as DatabaseService);

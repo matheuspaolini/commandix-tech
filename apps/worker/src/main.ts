@@ -4,13 +4,13 @@ import { type MicroserviceOptions, Transport } from "@nestjs/microservices";
 import { CONTRACT_ACTIVATED_QUEUE } from "./notification/contract-activated-event";
 import { RabbitMqTopology } from "./notification/rabbitmq-topology";
 import { workerRuntimeConfigFromEnvironment } from "./runtime-config";
-import { WorkerModule } from "./worker.module";
+import { createWorkerModule } from "./worker.module";
 
 async function main(): Promise<void> {
   const config = workerRuntimeConfigFromEnvironment();
   await declareTopology(new RabbitMqTopology(config.rabbitMqUrl));
   const app = await NestFactory.createMicroservice<MicroserviceOptions>(
-    WorkerModule,
+    createWorkerModule(config),
     {
       logger: false,
       abortOnError: false,

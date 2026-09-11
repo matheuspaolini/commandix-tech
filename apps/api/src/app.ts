@@ -23,12 +23,17 @@ import {
   RabbitMqHealthProbe,
 } from "./health-probes";
 import { HttpRequestLogger, type LogWriter } from "./http";
-import { RuntimeConfigModule } from "./runtime-config";
+import {
+  RuntimeConfig,
+  RuntimeConfigModule,
+  runtimeConfigFromEnvironment,
+} from "./runtime-config";
 import { TenantModule } from "./tenant/tenant.module";
 
-@Module({
+export function createApiModule(config: RuntimeConfig): DynamicModule {
+  @Module({
   imports: [
-    RuntimeConfigModule,
+    RuntimeConfigModule.register(config),
     DatabaseModule,
     AuthModule,
     TenantModule,
@@ -49,7 +54,13 @@ import { TenantModule } from "./tenant/tenant.module";
       useExisting: RabbitMqHealthProbe,
     },
   ],
-})
+  })
+  class AppModule {}
+  return { module: AppModule };
+}
+
+/** Compatibility root for presentation-only test modules. */
+@Module({})
 export class AppModule {}
 
 const NEST_APPLICATION_OPTIONS: NestApplicationOptions = {
@@ -72,7 +83,7 @@ export type CreateAppOptions = {
 };
 
 export async function createApp({
-  rootModule = AppModule,
+  rootModule = createApiModule(runtimeConfigFromEnvironment()),
   writeLog = console.log,
 }: CreateAppOptions = {}): Promise<INestApplication> {
   const app = await NestFactory.create(rootModule, NEST_APPLICATION_OPTIONS);
