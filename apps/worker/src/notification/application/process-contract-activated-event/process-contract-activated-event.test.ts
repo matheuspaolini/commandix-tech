@@ -5,7 +5,7 @@ import {
   NotificationProcessingError,
   ProcessContractActivatedEvent,
   type ActivationNotificationRepository,
-} from "../src/notification/process-contract-activated-event";
+} from "./process-contract-activated-event";
 
 const EVENT = {
   eventId: "0d087f87-0177-41ce-a705-ffb33d160fb8",

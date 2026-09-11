@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
 import type { RmqContext } from "@nestjs/microservices";
-import { ContractActivatedConsumer } from "../src/notification/contract-activated.consumer";
+import { ContractActivatedConsumer } from "./contract-activated.consumer";
 import {
   ContractReferenceInvalidError,
   ProcessContractActivatedEvent,
-} from "../src/notification/process-contract-activated-event";
+} from "@/notification/application/process-contract-activated-event/process-contract-activated-event";
 
 const EVENT = {
   eventId: "0d087f87-0177-41ce-a705-ffb33d160fb8",

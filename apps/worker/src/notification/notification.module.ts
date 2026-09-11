@@ -1,7 +1,7 @@
 import { Module } from "@nestjs/common";
-import { DatabaseModule } from "../database";
-import { ContractActivatedConsumer } from "./contract-activated.consumer";
-import { PrismaActivationNotificationRepository } from "./prisma-activation-notification.repository";
+import { DatabaseModule } from "@/database";
+import { ContractActivatedConsumer } from "@/notification/presentation/contract-activated.consumer";
+import { PrismaActivationNotificationRepository } from "@/notification/infrastructure/prisma-activation-notification.repository";
 import {
   ACTIVATION_NOTIFICATION_REPOSITORY,
   NOTIFICATION_CLOCK,
@@ -10,7 +10,7 @@ import {
   type ActivationNotificationRepository,
   type Clock,
   type LogWriter,
-} from "./process-contract-activated-event";
+} from "@/notification/application/process-contract-activated-event/process-contract-activated-event";
 
 @Module({
   imports: [DatabaseModule],

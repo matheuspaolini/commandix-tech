@@ -1,6 +1,6 @@
 import { Prisma } from "@commandix/database";
 import { Injectable } from "@nestjs/common";
-import { DatabaseService } from "../database";
+import { DatabaseService } from "@/database";
 import type { ValidatedContractActivatedEvent } from "@commandix/contract-events";
 import {
   ActivationRevisionInvalidError,
@@ -8,7 +8,7 @@ import {
   EventIdentityConflictError,
   type ActivationNotificationRepository,
   type ProcessingOutcome,
-} from "./process-contract-activated-event";
+} from "@/notification/application/process-contract-activated-event/process-contract-activated-event";
 
 @Injectable()
 export class PrismaActivationNotificationRepository implements ActivationNotificationRepository {

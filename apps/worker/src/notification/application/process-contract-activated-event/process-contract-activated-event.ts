@@ -4,6 +4,7 @@ import {
   parseContractActivatedEvent,
   type ValidatedContractActivatedEvent,
 } from "@commandix/contract-events";
+import { NotificationLog } from "@/notification/domain/notification-log";
 
 export type ProcessingOutcome = "created" | "duplicate";
 export type FailureReason =
@@ -59,7 +60,14 @@ export class ProcessContractActivatedEvent {
     }
 
     try {
-      const outcome = await this.repository.record(event, this.clock.now());
+      const notification = NotificationLog.reconstitute({
+        event,
+        processedAt: this.clock.now(),
+      });
+      const outcome = await this.repository.record(
+        notification.event,
+        notification.processedAt,
+      );
       this.writeLog(
         JSON.stringify({
           event: "notification_processed",

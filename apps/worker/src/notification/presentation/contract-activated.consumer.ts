@@ -4,7 +4,7 @@ import { CONTRACT_ACTIVATED_PATTERN } from "@commandix/contract-events";
 import {
   NotificationProcessingError,
   ProcessContractActivatedEvent,
-} from "./process-contract-activated-event";
+} from "@/notification/application/process-contract-activated-event/process-contract-activated-event";
 
 @Controller()
 export class ContractActivatedConsumer {

@@ -1,13 +1,13 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createPrismaClient } from "@commandix/database";
-import type { DatabaseService } from "../src/database";
+import type { DatabaseService } from "@/database";
 import { parseContractActivatedEvent } from "@commandix/contract-events";
-import { PrismaActivationNotificationRepository } from "../src/notification/prisma-activation-notification.repository";
+import { PrismaActivationNotificationRepository } from "./prisma-activation-notification.repository";
 import {
   ActivationRevisionInvalidError,
   ContractReferenceInvalidError,
   EventIdentityConflictError,
-} from "../src/notification/process-contract-activated-event";
+} from "@/notification/application/process-contract-activated-event/process-contract-activated-event";
 
 const client = createPrismaClient({
   datasourceUrl: Bun.env.TEST_DATABASE_URL ?? Bun.env.DATABASE_URL ?? "",
