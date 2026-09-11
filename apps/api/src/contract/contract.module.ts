@@ -20,12 +20,16 @@ import {
 } from "@/contract/application/read-contract-detail/read-contract-detail";
 import { ContractTransitionLogger } from "@/contract/presentation/contract-transition.logger";
 import {
+  PrismaContractActivationTransactions,
+  PrismaContractClosureTransactions,
   PrismaContractDraftEditTransactions,
-  PrismaContractStatusTransitionTransactions,
 } from "@/contract/infrastructure/prisma-contract-transition";
 import { TransitionStatus } from "@/contract/application/transition-status/transition-status";
 import { DRAFT_EDIT_TRANSACTIONS } from "@/contract/application/edit-draft-values/draft-edit-transaction";
-import { STATUS_TRANSITION_TRANSACTIONS } from "@/contract/application/transition-status/status-transition-transaction";
+import {
+  ACTIVATION_TRANSACTIONS,
+  CLOSURE_TRANSACTIONS,
+} from "@/contract/application/transition-status/status-transition-transaction";
 import { EditDraftValues } from "@/contract/application/edit-draft-values/edit-draft-values";
 import { PrismaContractRegisterRepository } from "@/contract/infrastructure/prisma-contract-register.repository";
 import {
@@ -53,7 +57,8 @@ import { TemplatePublicationLogger } from "@/contract/presentation/template-publ
     ContractTransitionLogger,
     TemplatePublicationLogger,
     PrismaContractDraftEditTransactions,
-    PrismaContractStatusTransitionTransactions,
+    PrismaContractActivationTransactions,
+    PrismaContractClosureTransactions,
     PrismaContractCreationTransactions,
     PrismaTemplatePublicationTransactions,
     PrismaContractDetailRepository,
@@ -64,13 +69,18 @@ import { TemplatePublicationLogger } from "@/contract/presentation/template-publ
       useExisting: PrismaContractDraftEditTransactions,
     },
     {
-      provide: STATUS_TRANSITION_TRANSACTIONS,
-      useExisting: PrismaContractStatusTransitionTransactions,
+      provide: ACTIVATION_TRANSACTIONS,
+      useExisting: PrismaContractActivationTransactions,
+    },
+    {
+      provide: CLOSURE_TRANSACTIONS,
+      useExisting: PrismaContractClosureTransactions,
     },
     {
       provide: TransitionStatus,
-      useFactory: (transactions) => new TransitionStatus(transactions),
-      inject: [STATUS_TRANSITION_TRANSACTIONS],
+      useFactory: (activations, closures) =>
+        new TransitionStatus(activations, closures),
+      inject: [ACTIVATION_TRANSACTIONS, CLOSURE_TRANSACTIONS],
     },
     {
       provide: EditDraftValues,

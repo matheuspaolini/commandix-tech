@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
 import { createPrismaClient } from "@commandix/database";
 import { CreateContract } from "@/contract/application/create-contract/create-contract";
+import { PrismaContractDraftEditTransactions } from "@/contract/infrastructure/prisma-contract-transition";
 import { PrismaContractCreationTransactions } from "@/contract/infrastructure/prisma-contract-creation";
 import type { DatabaseService } from "@/database";
 
@@ -78,6 +79,86 @@ describe("Contract persistence invariants", () => {
     expect({ result, persisted }).toStrictEqual({
       result: "rejected",
       persisted: 0,
+    });
+  });
+
+  test("rolls back a Draft edit when its History insert fails", async () => {
+    const ids = [crypto.randomUUID(), crypto.randomUUID()];
+    const creation = new CreateContract(
+      new PrismaContractCreationTransactions({ client } as DatabaseService),
+      { now: () => new Date() },
+      { next: () => ids.shift()! },
+    );
+    const created = await creation.execute({
+      tenantId: acmeTenantId,
+      actorId: acmeActorId,
+      suppliedValues: {
+        title: "Rollback edit",
+        "effective-date": "2028-01-01",
+      },
+    });
+    const before = await client.contract.findUniqueOrThrow({
+      where: { id: created.id },
+      include: { history: true },
+    });
+    const transactions = new PrismaContractDraftEditTransactions({
+      client,
+    } as DatabaseService);
+    const failure = await transactions
+      .run(async (transaction) => {
+        const locked = await transaction.findForUpdate({
+          tenantId: before.tenantId,
+          contractId: before.id,
+        });
+        if (!locked) throw new Error("Missing rollback fixture");
+        const beforeSnapshot = {
+          status: locked.status,
+          revision: locked.revision,
+          values: locked.values,
+          templateVersionId: locked.templateVersion.id,
+        };
+        await transaction.persistDraftEdit({
+          contract: {
+            id: locked.id,
+            tenantId: locked.tenantId,
+            revision: 2,
+            values: { ...locked.values, title: "Must roll back" },
+          },
+          history: {
+            id: before.history[0]!.id,
+            tenantId: locked.tenantId,
+            contractId: locked.id,
+            actorId: acmeActorId,
+            action: "EDITED",
+            revision: 2,
+            occurredAt: new Date(),
+            before: beforeSnapshot,
+            after: {
+              ...beforeSnapshot,
+              revision: 2,
+              values: { ...locked.values, title: "Must roll back" },
+            },
+          },
+        });
+      })
+      .catch((error: unknown) => error);
+    const after = await client.contract.findUniqueOrThrow({
+      where: { id: created.id },
+      include: { history: true, activationOutbox: true },
+    });
+
+    expect({
+      failed: failure instanceof Error,
+      revision: after.revision,
+      values: after.values,
+      history: after.history.length,
+      outbox: after.activationOutbox.length,
+    }).toStrictEqual({
+      failed: true,
+      revision: 1,
+      values: before.values,
+      history: 1,
+      outbox: 0,
     });
   });
 

@@ -215,10 +215,15 @@ function isAllowedCrossFeatureImport(
       source.feature !== "auth" &&
       (source.layer === "presentation" || isRootComposition(source))
     );
-  return (
-    (isRootComposition(source) && isFeatureRootModule(target)) ||
-    source.path === "apps/api/src/seed.ts"
-  );
+  if (
+    source.path === "apps/api/src/seed.ts" &&
+    new Set([
+      "apps/api/src/contract/application/seed-workspaces/seed-workspaces.ts",
+      "apps/api/src/contract/infrastructure/prisma-seed-workspace.repository.ts",
+    ]).has(target.path)
+  )
+    return true;
+  return isRootComposition(source) && isFeatureRootModule(target);
 }
 
 function isPasswordContractException(
@@ -334,6 +339,12 @@ function assertFixtureRules(): void {
     "../../read-contract-detail/query",
     true,
   );
+  const rejectedSeedCrossing = importViolation(
+    join(ROOT, "apps/api/src/seed.ts"),
+    join(ROOT, "apps/api/src/contract/presentation/contract.controller.ts"),
+    "@/contract/presentation/contract.controller",
+    true,
+  );
   if (
     allowed ||
     !forbiddenLayer ||
@@ -344,7 +355,8 @@ function assertFixtureRules(): void {
     allowedRootWiring ||
     !rejectedRootWiring ||
     allowedParentRelative ||
-    !rejectedParentRelative
+    !rejectedParentRelative ||
+    !rejectedSeedCrossing
   )
     failures.push(
       "architecture fixtures: checker rules are not enforcing required dependency shapes",

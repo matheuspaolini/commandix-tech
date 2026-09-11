@@ -18,13 +18,11 @@ export interface SeedPasswordHasher {
   hash(password: string): Promise<string>;
 }
 
-export interface SeedIdentityCanonicalizer {
-  canonicalize(input: { slug: string; email: string; password: string }): {
-    slug: string;
-    email: string;
-    password: string;
-  };
-}
+export type CanonicalizeSeedIdentity = (input: {
+  slug: string;
+  email: string;
+  password: string;
+}) => { slug: string; email: string; password: string };
 
 export interface SeedWorkspaceRepository {
   ensureTenant(slug: string): Promise<{ id: string; created: boolean }>;
@@ -45,7 +43,7 @@ export class SeedWorkspaces {
   constructor(
     private readonly repository: SeedWorkspaceRepository,
     private readonly passwords: SeedPasswordHasher,
-    private readonly identities: SeedIdentityCanonicalizer,
+    private readonly canonicalizeIdentity: CanonicalizeSeedIdentity,
   ) {}
 
   async execute(
@@ -59,7 +57,7 @@ export class SeedWorkspaces {
     };
 
     for (const workspace of workspaces) {
-      const canonicalWorkspace = this.identities.canonicalize({
+      const canonicalWorkspace = this.canonicalizeIdentity({
         slug: workspace.slug,
         email: workspace.users[0]?.email ?? "",
         password,
@@ -70,7 +68,7 @@ export class SeedWorkspaces {
       if (tenant.created) counts.tenantsCreated += 1;
 
       for (const user of workspace.users) {
-        const identity = this.identities.canonicalize({
+        const identity = this.canonicalizeIdentity({
           slug: workspace.slug,
           email: user.email,
           password,

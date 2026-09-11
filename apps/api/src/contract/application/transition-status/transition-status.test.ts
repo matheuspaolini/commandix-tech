@@ -1,9 +1,14 @@
 import { expect, test } from "bun:test";
-import type { StatusTransitionTransaction } from "@/contract/application/transition-status/status-transition-transaction";
+import type {
+  ActivationTransaction,
+  ClosureTransaction,
+} from "@/contract/application/transition-status/status-transition-transaction";
 import {
   ContractLifecycle,
   ContractRevisionConflict,
   ContractStatusConflict,
+  type TransitionClock,
+  type TransitionIdGenerator,
   TransitionStatus,
 } from "@/contract/application/transition-status/transition-status";
 
@@ -19,21 +24,51 @@ const DRAFT = {
   },
 };
 
+function activationUseCase(
+  transaction: ActivationTransaction,
+  options?: { clock?: TransitionClock; ids?: TransitionIdGenerator },
+): TransitionStatus {
+  const closure: ClosureTransaction = {
+    findForUpdate: transaction.findForUpdate,
+    persistClosure: async () => {},
+  };
+  return new TransitionStatus(
+    { run: (operation) => operation(transaction) },
+    { run: (operation) => operation(closure) },
+    options?.clock,
+    options?.ids,
+  );
+}
+
+function closureUseCase(
+  transaction: ClosureTransaction,
+  options?: { clock?: TransitionClock; ids?: TransitionIdGenerator },
+): TransitionStatus {
+  const activation: ActivationTransaction = {
+    findForUpdate: transaction.findForUpdate,
+    persistActivation: async () => {},
+  };
+  return new TransitionStatus(
+    { run: (operation) => operation(activation) },
+    { run: (operation) => operation(transaction) },
+    options?.clock,
+    options?.ids,
+  );
+}
+
 test("activates a current Draft with one History entry and Outbox event", async () => {
   let persisted: unknown;
-  const transaction: StatusTransitionTransaction = {
+  const transaction: ActivationTransaction = {
     findForUpdate: async () => DRAFT,
     persistActivation: async (input) => {
       persisted = input;
     },
-    persistClosure: async () => {},
   };
   const ids = ["history-id", "event-id"];
-  const useCase = new TransitionStatus(
-    { run: (operation) => operation(transaction) },
-    { now: () => new Date("2026-09-10T18:30:00.123Z") },
-    { next: () => ids.shift()! },
-  );
+  const useCase = activationUseCase(transaction, {
+    clock: { now: () => new Date("2026-09-10T18:30:00.123Z") },
+    ids: { next: () => ids.shift()! },
+  });
 
   const result = await useCase.execute({
     tenantId: "tenant-id",
@@ -100,14 +135,11 @@ test("activates a current Draft with one History entry and Outbox event", async 
 });
 
 test("reports a stale revision before an invalid lifecycle", async () => {
-  const transaction: StatusTransitionTransaction = {
+  const transaction: ActivationTransaction = {
     findForUpdate: async () => ({ ...DRAFT, status: "ACTIVE", revision: 2 }),
     persistActivation: async () => {},
-    persistClosure: async () => {},
   };
-  const useCase = new TransitionStatus({
-    run: (operation) => operation(transaction),
-  });
+  const useCase = activationUseCase(transaction);
 
   const error = await useCase
     .execute({
@@ -128,18 +160,13 @@ test("reports a stale revision before an invalid lifecycle", async () => {
 
 test("rejects a current non-Draft lifecycle without persistence", async () => {
   let persisted = false;
-  const transaction: StatusTransitionTransaction = {
+  const transaction: ActivationTransaction = {
     findForUpdate: async () => ({ ...DRAFT, status: "ACTIVE", revision: 2 }),
     persistActivation: async () => {
       persisted = true;
     },
-    persistClosure: async () => {
-      persisted = true;
-    },
   };
-  const useCase = new TransitionStatus({
-    run: (operation) => operation(transaction),
-  });
+  const useCase = activationUseCase(transaction);
 
   const error = await useCase
     .execute({
@@ -161,18 +188,16 @@ test("rejects a current non-Draft lifecycle without persistence", async () => {
 test("closes a current Active with one History entry and no Outbox event", async () => {
   let persisted: unknown;
   let generatedIds = 0;
-  const transaction: StatusTransitionTransaction = {
+  const transaction: ClosureTransaction = {
     findForUpdate: async () => ({ ...DRAFT, status: "ACTIVE", revision: 2 }),
-    persistActivation: async () => {},
     persistClosure: async (input) => {
       persisted = input;
     },
   };
-  const useCase = new TransitionStatus(
-    { run: (operation) => operation(transaction) },
-    { now: () => new Date("2026-09-11T13:00:00.000Z") },
-    { next: () => `history-${++generatedIds}` },
-  );
+  const useCase = closureUseCase(transaction, {
+    clock: { now: () => new Date("2026-09-11T13:00:00.000Z") },
+    ids: { next: () => `history-${++generatedIds}` },
+  });
 
   const result = await useCase.execute({
     tenantId: "tenant-id",

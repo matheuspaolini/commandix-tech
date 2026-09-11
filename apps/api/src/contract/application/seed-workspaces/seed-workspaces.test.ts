@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
 import {
-  type SeedIdentityCanonicalizer,
+  type CanonicalizeSeedIdentity,
   type SeedPasswordHasher,
   type SeedWorkspaceRepository,
   SeedWorkspaces,
@@ -31,13 +31,11 @@ class StubPasswordHasher implements SeedPasswordHasher {
   }
 }
 
-const IDENTITIES: SeedIdentityCanonicalizer = {
-  canonicalize: ({ slug, email, password }) => ({
-    slug: slug.trim().toLowerCase(),
-    email: email.trim().toLowerCase(),
-    password,
-  }),
-};
+const canonicalize: CanonicalizeSeedIdentity = ({ slug, email, password }) => ({
+  slug: slug.trim().toLowerCase(),
+  email: email.trim().toLowerCase(),
+  password,
+});
 
 class RecordingSeedRepository implements SeedWorkspaceRepository {
   readonly users = new Set<string>();
@@ -69,7 +67,7 @@ describe("SeedWorkspaces", () => {
     const service = new SeedWorkspaces(
       repository,
       new StubPasswordHasher(),
-      IDENTITIES,
+      canonicalize,
     );
 
     expect(
@@ -85,7 +83,7 @@ describe("SeedWorkspaces", () => {
     const repository = new RecordingSeedRepository();
     repository.users.add("admin@acme.test");
     const passwords = new StubPasswordHasher();
-    const service = new SeedWorkspaces(repository, passwords, IDENTITIES);
+    const service = new SeedWorkspaces(repository, passwords, canonicalize);
     await service.execute(WORKSPACES, "Commandix-demo-2026!");
 
     expect(passwords.hashed).toStrictEqual(["Commandix-demo-2026!"]);

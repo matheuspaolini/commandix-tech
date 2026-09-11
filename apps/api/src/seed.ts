@@ -1,45 +1,44 @@
 import { BunPasswordHasher } from "@/platform/password-hasher";
 import { canonicalIdentity } from "@/tenant/tenant.contract";
-import { canonicalTemplateDefinition } from "@/contract/domain/template-definition";
 import { PrismaSeedWorkspaceRepository } from "@/contract/infrastructure/prisma-seed-workspace.repository";
 import { SeedWorkspaces } from "@/contract/application/seed-workspaces/seed-workspaces";
 import { DatabaseService } from "./database";
 import { runtimeConfigFromEnvironment } from "./runtime-config";
 
 const DEVELOPMENT_PASSWORD = "Commandix-demo-2026!";
-const SEEDED_TEMPLATE = canonicalTemplateDefinition({
+const SEEDED_TEMPLATE = {
   fields: [
-    { key: "title", label: "Title", type: "text", required: true },
+    { key: "title", label: "Title", type: "text" as const, required: true },
     {
       key: "amount",
       label: "Amount",
-      type: "number",
+      type: "number" as const,
       required: false,
       default: 0,
     },
     {
       key: "effective-date",
       label: "Effective date",
-      type: "date",
+      type: "date" as const,
       required: true,
     },
     {
       key: "approved",
       label: "Approved",
-      type: "boolean",
+      type: "boolean" as const,
       required: false,
       default: false,
     },
     {
       key: "category",
       label: "Category",
-      type: "enum",
+      type: "enum" as const,
       required: true,
       options: ["standard", "premium"],
       default: "standard",
     },
   ],
-});
+};
 const SEED_WORKSPACES = ["acme", "globex"].map((slug) => ({
   slug,
   users: [
@@ -55,7 +54,7 @@ async function seed(): Promise<void> {
     const workspaces = new SeedWorkspaces(
       new PrismaSeedWorkspaceRepository(database),
       new BunPasswordHasher(),
-      { canonicalize: canonicalIdentity },
+      canonicalIdentity,
     );
     const counts = await workspaces.execute(
       SEED_WORKSPACES,

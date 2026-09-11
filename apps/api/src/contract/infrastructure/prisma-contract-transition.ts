@@ -9,11 +9,13 @@ import type {
   LockedDraftContract,
 } from "@/contract/application/edit-draft-values/draft-edit-transaction";
 import type {
+  ActivationTransaction,
+  ActivationTransactions,
   ActivationPersistence,
+  ClosureTransaction,
+  ClosureTransactions,
   ClosurePersistence,
   LockedStatusTransitionContract,
-  StatusTransitionTransaction,
-  StatusTransitionTransactions,
 } from "@/contract/application/transition-status/status-transition-transaction";
 
 type TransactionClient = Parameters<
@@ -42,7 +44,7 @@ class PrismaDraftEditTransaction implements DraftEditTransaction {
   }
 }
 
-class PrismaStatusTransitionTransaction implements StatusTransitionTransaction {
+class PrismaContractActivationTransaction implements ActivationTransaction {
   constructor(private readonly transaction: TransactionClient) {}
 
   async findForUpdate(input: {
@@ -58,6 +60,17 @@ class PrismaStatusTransitionTransaction implements StatusTransitionTransaction {
     await this.transaction.contractActivationOutbox.create({
       data: input.event,
     });
+  }
+}
+
+class PrismaContractClosureTransaction implements ClosureTransaction {
+  constructor(private readonly transaction: TransactionClient) {}
+
+  async findForUpdate(input: {
+    tenantId: string;
+    contractId: string;
+  }): Promise<LockedStatusTransitionContract | null> {
+    return findLockedContract(this.transaction, input);
   }
 
   async persistClosure(input: ClosurePersistence): Promise<void> {
@@ -120,14 +133,27 @@ export class PrismaContractDraftEditTransactions implements DraftEditTransaction
 }
 
 @Injectable()
-export class PrismaContractStatusTransitionTransactions implements StatusTransitionTransactions {
+export class PrismaContractActivationTransactions implements ActivationTransactions {
   constructor(private readonly database: DatabaseService) {}
 
   run<T>(
-    operation: (transaction: StatusTransitionTransaction) => Promise<T>,
+    operation: (transaction: ActivationTransaction) => Promise<T>,
   ): Promise<T> {
     return this.database.client.$transaction((transaction) =>
-      operation(new PrismaStatusTransitionTransaction(transaction)),
+      operation(new PrismaContractActivationTransaction(transaction)),
+    );
+  }
+}
+
+@Injectable()
+export class PrismaContractClosureTransactions implements ClosureTransactions {
+  constructor(private readonly database: DatabaseService) {}
+
+  run<T>(
+    operation: (transaction: ClosureTransaction) => Promise<T>,
+  ): Promise<T> {
+    return this.database.client.$transaction((transaction) =>
+      operation(new PrismaContractClosureTransaction(transaction)),
     );
   }
 }

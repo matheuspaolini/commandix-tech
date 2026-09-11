@@ -2,7 +2,13 @@ import {
   CONTRACT_ACTIVATED_EVENT_TYPE,
   CONTRACT_ACTIVATED_SCHEMA_VERSION,
 } from "@commandix/contract-events";
-import type { StatusTransitionTransactions } from "@/contract/application/transition-status/status-transition-transaction";
+import type {
+  ActivationTransaction,
+  ActivationTransactions,
+  ClosureTransaction,
+  ClosureTransactions,
+  LockedStatusTransitionContract,
+} from "@/contract/application/transition-status/status-transition-transaction";
 import type { ContractSnapshot } from "@/contract/domain/contract-snapshot";
 import {
   ContractEntity,
@@ -78,100 +84,127 @@ const UUIDS: TransitionIdGenerator = { next: () => crypto.randomUUID() };
 
 export class TransitionStatus {
   constructor(
-    private readonly transactions: StatusTransitionTransactions,
+    private readonly activations: ActivationTransactions,
+    private readonly closures: ClosureTransactions,
     private readonly clock: TransitionClock = SYSTEM_CLOCK,
     private readonly ids: TransitionIdGenerator = UUIDS,
   ) {}
 
   execute(command: TransitionStatusCommand): Promise<TransitionStatusResult> {
-    return this.transactions.run(async (transaction) => {
-      const current = await transaction.findForUpdate(command);
-      if (!current) throw new ContractNotFound();
-      if (current.revision !== command.expectedRevision)
-        throw new ContractRevisionConflict();
-      const next = ContractEntity.reconstitute({
-        id: ContractIdentifier.from(current.id),
-        tenantId: TenantIdentifier.from(current.tenantId),
-        templateVersionId: TemplateVersionIdentifier.from(
-          current.templateVersion.id,
-        ),
-        status: current.status,
-        revision: current.revision,
-        values: current.values,
-      }).transitionTo(command.targetStatus);
-      const status = next.status;
-      const revision = next.revision;
-      const occurredAt = this.clock.now();
-      const history = HistoryEntity.create({
-        id: HistoryIdentifier.from(this.ids.next()),
-        tenantId: TenantIdentifier.from(current.tenantId),
-        contractId: ContractIdentifier.from(current.id),
-        revision,
-      }).envelope();
-      const before: ContractSnapshot = {
-        status: current.status,
-        revision: current.revision,
-        values: current.values,
-        templateVersionId: current.templateVersion.id,
-      };
-      const after: ContractSnapshot = { ...before, status, revision };
+    if (command.targetStatus === "ACTIVE")
+      return this.activations.run((transaction) =>
+        this.activate(transaction, command),
+      );
+    return this.closures.run((transaction) => this.close(transaction, command));
+  }
 
-      const contract: ContractDetail = {
+  private async activate(
+    transaction: ActivationTransaction,
+    command: TransitionStatusCommand & { targetStatus: "ACTIVE" },
+  ): Promise<TransitionStatusResult> {
+    const transition = await this.transition(transaction, command);
+    const event = ActivationOutboxEventEntity.create({
+      eventId: ActivationOutboxEventIdentifier.from(this.ids.next()),
+      tenantId: TenantIdentifier.from(transition.current.tenantId),
+      contractId: ContractIdentifier.from(transition.current.id),
+      activationRevision: transition.revision,
+    }).activation();
+    await transaction.persistActivation({
+      contract: {
+        id: transition.current.id,
+        tenantId: transition.current.tenantId,
+        status: "ACTIVE",
+        revision: transition.revision,
+      },
+      history: { ...transition.history, action: "ACTIVATED" },
+      event: {
+        ...event,
+        eventType: CONTRACT_ACTIVATED_EVENT_TYPE,
+        schemaVersion: CONTRACT_ACTIVATED_SCHEMA_VERSION,
+        occurredAt: transition.occurredAt,
+        correlationId: command.correlationId,
+        nextAttemptAt: transition.occurredAt,
+      },
+    });
+    return {
+      targetStatus: "ACTIVE",
+      contract: transition.contract,
+      eventId: event.eventId,
+    };
+  }
+
+  private async close(
+    transaction: ClosureTransaction,
+    command: TransitionStatusCommand & { targetStatus: "CLOSED" },
+  ): Promise<TransitionStatusResult> {
+    const transition = await this.transition(transaction, command);
+    await transaction.persistClosure({
+      contract: {
+        id: transition.current.id,
+        tenantId: transition.current.tenantId,
+        status: "CLOSED",
+        revision: transition.revision,
+      },
+      history: { ...transition.history, action: "CLOSED" },
+    });
+    return { targetStatus: "CLOSED", contract: transition.contract };
+  }
+
+  private async transition(
+    transaction: Pick<ActivationTransaction, "findForUpdate">,
+    command: TransitionStatusCommand,
+  ) {
+    const current = await transaction.findForUpdate(command);
+    if (!current) throw new ContractNotFound();
+    if (current.revision !== command.expectedRevision)
+      throw new ContractRevisionConflict();
+    const next = ContractEntity.reconstitute({
+      id: ContractIdentifier.from(current.id),
+      tenantId: TenantIdentifier.from(current.tenantId),
+      templateVersionId: TemplateVersionIdentifier.from(
+        current.templateVersion.id,
+      ),
+      status: current.status,
+      revision: current.revision,
+      values: current.values,
+    }).transitionTo(command.targetStatus);
+    const revision = next.revision;
+    const occurredAt = this.clock.now();
+    const before: ContractSnapshot = {
+      status: current.status,
+      revision: current.revision,
+      values: current.values,
+      templateVersionId: current.templateVersion.id,
+    };
+    const after: ContractSnapshot = {
+      ...before,
+      status: next.status,
+      revision,
+    };
+    return {
+      current,
+      revision,
+      occurredAt,
+      contract: {
         id: current.id,
-        status,
+        status: next.status,
         revision,
         values: current.values,
         templateVersion: current.templateVersion,
-      };
-      const historyPersistence = {
-        ...history,
+      } satisfies ContractDetail,
+      history: {
+        ...HistoryEntity.create({
+          id: HistoryIdentifier.from(this.ids.next()),
+          tenantId: TenantIdentifier.from(current.tenantId),
+          contractId: ContractIdentifier.from(current.id),
+          revision,
+        }).envelope(),
         actorId: command.actorId,
         revision,
         occurredAt,
         before,
         after,
-      };
-
-      if (status === "CLOSED") {
-        await transaction.persistClosure({
-          contract: {
-            id: current.id,
-            tenantId: current.tenantId,
-            status,
-            revision,
-          },
-          history: { ...historyPersistence, action: "CLOSED" },
-        });
-        return { targetStatus: "CLOSED", contract };
-      }
-      if (status !== "ACTIVE")
-        throw new Error("Contract transition produced an invalid target");
-
-      const event = ActivationOutboxEventEntity.create({
-        eventId: ActivationOutboxEventIdentifier.from(this.ids.next()),
-        tenantId: TenantIdentifier.from(current.tenantId),
-        contractId: ContractIdentifier.from(current.id),
-        activationRevision: revision,
-      }).activation();
-      await transaction.persistActivation({
-        contract: {
-          id: current.id,
-          tenantId: current.tenantId,
-          status,
-          revision,
-        },
-        history: { ...historyPersistence, action: "ACTIVATED" },
-        event: {
-          ...event,
-          eventType: CONTRACT_ACTIVATED_EVENT_TYPE,
-          schemaVersion: CONTRACT_ACTIVATED_SCHEMA_VERSION,
-          occurredAt,
-          correlationId: command.correlationId,
-          nextAttemptAt: occurredAt,
-        },
-      });
-
-      return { targetStatus: "ACTIVE", contract, eventId: event.eventId };
-    });
+      },
+    };
   }
 }

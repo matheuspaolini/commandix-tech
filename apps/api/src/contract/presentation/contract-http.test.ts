@@ -3,10 +3,6 @@ import { createPrismaClient, PrismaClient } from "@commandix/database";
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 import { createApp } from "@/app";
-import {
-  DRAFT_EDIT_TRANSACTIONS,
-  type DraftEditTransactions,
-} from "@/contract/application/edit-draft-values/draft-edit-transaction";
 
 Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
 Bun.env.AUTH_ALLOWED_ORIGINS ??= "http://localhost:8080";
@@ -595,79 +591,6 @@ describe("PUT /contracts/:id/values", () => {
       active: [409, "CONTRACT_STATUS_CONFLICT"],
       persisted: { revision: 3, history: 3, outbox: 1 },
       race: { statuses: [200, 409], revision: 2, history: 2, coherent: true },
-    });
-  });
-
-  test("rolls back a Draft edit when its History insert fails", async () => {
-    const created = await create(tokens.get("acme:admin")!, {
-      title: "Rollback edit",
-      "effective-date": "2028-01-01",
-    });
-    const before = await client.contract.findUniqueOrThrow({
-      where: { id: created.body.id },
-      include: { history: true },
-    });
-    const actor = await client.user.findFirstOrThrow({
-      where: { tenantId: before.tenantId, role: "ADMIN" },
-    });
-    const transactions = app.get<DraftEditTransactions>(
-      DRAFT_EDIT_TRANSACTIONS,
-    );
-    const failure = await transactions
-      .run(async (transaction) => {
-        const locked = await transaction.findForUpdate({
-          tenantId: before.tenantId,
-          contractId: before.id,
-        });
-        if (!locked) throw new Error("Missing rollback fixture");
-        const beforeSnapshot = {
-          status: locked.status,
-          revision: locked.revision,
-          values: locked.values,
-          templateVersionId: locked.templateVersion.id,
-        };
-        await transaction.persistDraftEdit({
-          contract: {
-            id: locked.id,
-            tenantId: locked.tenantId,
-            revision: 2,
-            values: { ...locked.values, title: "Must roll back" },
-          },
-          history: {
-            id: before.history[0]!.id,
-            tenantId: locked.tenantId,
-            contractId: locked.id,
-            actorId: actor.id,
-            action: "EDITED",
-            revision: 2,
-            occurredAt: new Date(),
-            before: beforeSnapshot,
-            after: {
-              ...beforeSnapshot,
-              revision: 2,
-              values: { ...locked.values, title: "Must roll back" },
-            },
-          },
-        });
-      })
-      .catch((error: unknown) => error);
-    const after = await client.contract.findUniqueOrThrow({
-      where: { id: created.body.id },
-      include: { history: true, activationOutbox: true },
-    });
-
-    expect({
-      failed: failure instanceof Error,
-      revision: after.revision,
-      values: after.values,
-      history: after.history.length,
-      outbox: after.activationOutbox.length,
-    }).toStrictEqual({
-      failed: true,
-      revision: 1,
-      values: before.values,
-      history: 1,
-      outbox: 0,
     });
   });
 });

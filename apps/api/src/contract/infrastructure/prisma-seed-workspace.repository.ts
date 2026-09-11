@@ -5,6 +5,13 @@ import {
   canonicalTemplateDefinition,
   type TemplateDefinition,
 } from "@/contract/domain/template-definition";
+import {
+  LogicalTemplateEntity,
+  LogicalTemplateIdentifier,
+  TemplateVersionEntity,
+  TemplateVersionIdentifier,
+  TenantIdentifier,
+} from "@/contract/domain/entities";
 import type {
   SeedRole,
   SeedWorkspaceRepository,
@@ -79,27 +86,41 @@ export class PrismaSeedWorkspaceRepository implements SeedWorkspaceRepository {
       if (existing && existing._count.versions > 0)
         throw new AmbiguousSeedTemplate();
 
-      const logicalTemplate =
+      const persistedTemplate =
         existing ??
         (await transaction.logicalTemplate.create({
-          data: { tenantId },
+          data: { id: crypto.randomUUID(), tenantId },
           select: {
             id: true,
             activeVersionId: true,
             _count: { select: { versions: true } },
           },
         }));
-      const version = await transaction.templateVersion.create({
+      const tenant = TenantIdentifier.from(tenantId);
+      const version = TemplateVersionEntity.create({
+        id: TemplateVersionIdentifier.from(crypto.randomUUID()),
+        logicalTemplateId: LogicalTemplateIdentifier.from(persistedTemplate.id),
+        tenantId: tenant,
+        definition: canonicalDefinition,
+      });
+      const logicalTemplate = LogicalTemplateEntity.create({
+        id: version.logicalTemplateId,
+        tenantId: tenant,
+        activeVersionId: version.id,
+      });
+      const persistedVersion = await transaction.templateVersion.create({
         data: {
-          tenantId,
-          logicalTemplateId: logicalTemplate.id,
-          definition: canonicalDefinition as Prisma.InputJsonValue,
+          id: version.id.value,
+          tenantId: version.tenantId.value,
+          logicalTemplateId: version.logicalTemplateId.value,
+          definition:
+            version.definitionForPresentation() as Prisma.InputJsonValue,
         },
         select: { id: true },
       });
       await transaction.logicalTemplate.update({
-        where: { id: logicalTemplate.id },
-        data: { activeVersionId: version.id },
+        where: { id: logicalTemplate.id.value },
+        data: { activeVersionId: persistedVersion.id },
       });
       return true;
     });
