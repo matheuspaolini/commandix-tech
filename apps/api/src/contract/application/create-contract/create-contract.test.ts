@@ -4,9 +4,17 @@ import {
   CreateContract,
   type ContractCreationTransaction,
 } from "@/contract/application/create-contract/create-contract";
+import {
+  LogicalTemplateIdentifier,
+  TemplateVersionEntity,
+  TemplateVersionIdentifier,
+  TenantIdentifier,
+} from "@/contract/domain/entities";
 
-const template = {
-  id: "template-version",
+const template = TemplateVersionEntity.reconstitute({
+  id: TemplateVersionIdentifier.from("template-version"),
+  logicalTemplateId: LogicalTemplateIdentifier.from("logical-template"),
+  tenantId: TenantIdentifier.from("tenant-id"),
   definition: {
     fields: [
       {
@@ -17,7 +25,7 @@ const template = {
       },
     ],
   },
-};
+});
 
 test("creates a revision-one Draft and its first History entry", async () => {
   let inserted: unknown;

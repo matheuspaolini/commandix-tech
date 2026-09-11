@@ -1,9 +1,16 @@
-import type { TemplateDefinition } from "@/contract/domain/template-definition";
 import {
   resolveContractValues,
   type ContractValues,
 } from "@/contract/domain/contract-values";
 import type { ContractSnapshot } from "@/contract/domain/contract-snapshot";
+import {
+  ContractEntity,
+  ContractIdentifier,
+  HistoryEntity,
+  HistoryIdentifier,
+  TemplateVersionEntity,
+  TenantIdentifier,
+} from "@/contract/domain/entities";
 
 export type NewContract = ContractSnapshot & {
   id: string;
@@ -21,10 +28,7 @@ export type CreationHistory = {
   before: null;
   after: ContractSnapshot;
 };
-export type ActiveTemplateForCreation = {
-  id: string;
-  definition: TemplateDefinition;
-};
+export type ActiveTemplateForCreation = TemplateVersionEntity;
 export interface ContractCreationTransaction {
   findActiveTemplateForUpdate(
     tenantId: string,
@@ -75,28 +79,38 @@ export class CreateContract {
       );
       if (!template) throw new ActiveTemplateRequired();
       const values = resolveContractValues(
-        template.definition,
+        template.definitionForPresentation(),
         command.suppliedValues,
       );
       const occurredAt = this.clock.now();
-      const contractId = this.ids.next();
-      const after: ContractSnapshot = {
-        status: "DRAFT",
-        revision: 1,
-        values,
+      const contract = ContractEntity.create({
+        id: ContractIdentifier.from(this.ids.next()),
+        tenantId: TenantIdentifier.from(command.tenantId),
         templateVersionId: template.id,
+        values,
+      });
+      const contractSnapshot = contract.snapshot();
+      const history = HistoryEntity.create({
+        id: HistoryIdentifier.from(this.ids.next()),
+        tenantId: contract.tenantId,
+        contractId: contract.id,
+        revision: contract.revision,
+      }).envelope();
+      const after: ContractSnapshot = {
+        status: contractSnapshot.status,
+        revision: 1,
+        values: contractSnapshot.values,
+        templateVersionId: contractSnapshot.templateVersionId,
       };
       await transaction.insertContractAndHistory({
         contract: {
           ...after,
-          id: contractId,
-          tenantId: command.tenantId,
+          id: contractSnapshot.id,
+          tenantId: contractSnapshot.tenantId,
           createdAt: occurredAt,
         },
         history: {
-          id: this.ids.next(),
-          tenantId: command.tenantId,
-          contractId,
+          ...history,
           actorId: command.actorId,
           action: "CREATED",
           revision: 1,
@@ -106,10 +120,10 @@ export class CreateContract {
         },
       });
       return {
-        id: contractId,
+        id: contractSnapshot.id,
         status: "DRAFT",
         revision: 1,
-        templateVersionId: template.id,
+        templateVersionId: contractSnapshot.templateVersionId,
       };
     });
   }

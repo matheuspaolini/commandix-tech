@@ -10,6 +10,12 @@ import type {
   NewContract,
 } from "@/contract/application/create-contract/create-contract";
 import { canonicalTemplateDefinition } from "@/contract/domain/template-definition";
+import {
+  LogicalTemplateIdentifier,
+  TemplateVersionEntity,
+  TemplateVersionIdentifier,
+  TenantIdentifier,
+} from "@/contract/domain/entities";
 
 type TransactionClient = Parameters<
   Parameters<PrismaClient["$transaction"]>[0]
@@ -28,13 +34,17 @@ class PrismaContractCreationTransaction implements ContractCreationTransaction {
     if (!activeVersionId) return null;
     const version = await this.transaction.templateVersion.findFirst({
       where: { id: activeVersionId, tenantId },
-      select: { id: true, definition: true },
+      select: { id: true, logicalTemplateId: true, definition: true },
     });
     if (!version) return null;
-    return {
-      id: version.id,
+    return TemplateVersionEntity.reconstitute({
+      id: TemplateVersionIdentifier.from(version.id),
+      logicalTemplateId: LogicalTemplateIdentifier.from(
+        version.logicalTemplateId,
+      ),
+      tenantId: TenantIdentifier.from(tenantId),
       definition: canonicalTemplateDefinition(version.definition),
-    };
+    });
   }
 
   async insertContractAndHistory(input: {

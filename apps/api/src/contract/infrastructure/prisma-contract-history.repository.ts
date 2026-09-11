@@ -2,6 +2,12 @@ import { Injectable } from "@nestjs/common";
 
 import { DatabaseService } from "@/database";
 import type { ContractHistoryRepository } from "@/contract/application/read-contract-history/read-contract-history";
+import {
+  ContractIdentifier,
+  HistoryEntity,
+  HistoryIdentifier,
+  TenantIdentifier,
+} from "@/contract/domain/entities";
 
 @Injectable()
 export class PrismaContractHistoryRepository implements ContractHistoryRepository {
@@ -46,7 +52,20 @@ export class PrismaContractHistoryRepository implements ContractHistoryRepositor
         select: { id: true, definition: true },
       });
 
-      return { contract, entries, templateVersions };
+      const tenantId = TenantIdentifier.from(input.tenantId);
+      return {
+        contract,
+        entries: entries.map((entry) => ({
+          ...entry,
+          ...HistoryEntity.reconstitute({
+            id: HistoryIdentifier.from(entry.id),
+            tenantId,
+            contractId: ContractIdentifier.from(input.contractId),
+            revision: entry.revision,
+          }).envelope(),
+        })),
+        templateVersions,
+      };
     });
   }
 }
