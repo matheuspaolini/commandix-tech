@@ -10,8 +10,8 @@ import {
 import { IsString } from "class-validator";
 import request from "supertest";
 
-import { AppModule, createApp } from "../src/app";
-import { HealthController, HealthService } from "../src/health";
+import { AppModule, createApp } from "@/bootstrap/app";
+import { HealthController, HealthService } from "@/platform/health";
 
 Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
 Bun.env.AUTH_ALLOWED_ORIGINS ??= "http://localhost:8080";

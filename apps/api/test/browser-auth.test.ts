@@ -3,7 +3,7 @@ import { expect, test } from "bun:test";
 import {
   clearedRefreshCookieOptions,
   refreshCookieOptions,
-} from "../src/auth/presentation/browser-auth.http";
+} from "@/modules/auth/presentation/browser-auth.http";
 
 test("HTTPS Refresh cookies retain the original remaining lifetime", () => {
   const now = new Date("2026-09-10T12:00:00.000Z");

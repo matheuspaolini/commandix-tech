@@ -2,11 +2,6 @@ export const CONTRACT_ACTIVATED_EVENT_TYPE = "contract.activated";
 export const CONTRACT_ACTIVATED_SCHEMA_VERSION = 1;
 export const CONTRACT_ACTIVATED_PATTERN = "contract.activated.v1";
 export const CONTRACT_EVENTS_EXCHANGE = "commandix.contracts";
-export const CONTRACT_ACTIVATED_QUEUE =
-  "commandix.notifications.contract-activated.v1";
-export const NOTIFICATION_DEAD_LETTER_EXCHANGE = "commandix.notifications.dlx";
-export const CONTRACT_ACTIVATED_DEAD_LETTER_QUEUE =
-  "commandix.notifications.contract-activated.v1.dlq";
 
 const EVENT_FIELDS = new Set([
   "eventId",
@@ -64,7 +59,7 @@ export function toContractActivatedEnvelope(
   return { pattern: CONTRACT_ACTIVATED_PATTERN, data: event };
 }
 
-export function isUuid(value: unknown): value is string {
+function isUuid(value: unknown): value is string {
   return typeof value === "string" && UUID.test(value);
 }
 

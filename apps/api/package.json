@@ -17,9 +17,9 @@
   },
   "scripts": {
     "typecheck": "bun --bun tsc -p tsconfig.json",
-    "start": "bun src/main.ts",
-    "dev": "bun --watch src/main.ts",
-    "seed": "bun src/seed.ts",
+    "start": "bun src/bootstrap/main.ts",
+    "dev": "bun --watch src/bootstrap/main.ts",
+    "seed": "bun src/bootstrap/seed.ts",
     "test": "bun test"
   },
   "devDependencies": {

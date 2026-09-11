@@ -52,7 +52,7 @@ services:
     build:
       context: .
       target: server
-    command: [bun, apps/api/src/main.ts]
+    command: [bun, apps/api/src/bootstrap/main.ts]
     environment: &runtime-environment
       DATABASE_URL: postgresql://commandix_runtime:${RUNTIME_PASSWORD}@postgres:5432/commandix
       RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672
@@ -83,7 +83,7 @@ services:
     build:
       context: .
       target: server
-    command: [bun, apps/worker/src/main.ts]
+    command: [bun, apps/worker/src/bootstrap/main.ts]
     environment: *runtime-environment
     depends_on: *application-dependencies
     init: true

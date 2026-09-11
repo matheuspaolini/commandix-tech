@@ -21,6 +21,7 @@ enum ContractStatus {
 enum ContractHistoryAction {
   CREATED
   EDITED
+  MIGRATED
   ACTIVATED
   CLOSED
 }

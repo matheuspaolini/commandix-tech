@@ -306,6 +306,29 @@ Stale revisions and non-Draft states return the same `409` conflicts described
 above. The browser reloads current state after a conflict and never resubmits stale
 values automatically.
 
+An Admin can explicitly migrate a Draft to the Tenant's active Template version.
+First read the Contract for its current revision and `GET /templates/active` for
+the target version ID, then submit complete replacement values. Values are never
+copied or merged from the old version:
+
+```sh
+curl -i -X POST http://localhost:8080/api/contracts/CONTRACT_ID/migrate \
+  -H "authorization: Bearer $token" \
+  -H 'content-type: application/json' \
+  --data '{"expectedRevision":2,"targetVersionId":"ACTIVE_TEMPLATE_VERSION_ID","values":{"title":"Migrated agreement","tier":"premium","approved":false}}'
+```
+
+Success returns the full Draft detail with its target Template-version definition.
+A different target version always advances revision and appends one `MIGRATED`
+History entry; the History before/after snapshots retain their respective versions.
+A same-version request with equal resolved values returns the unchanged detail and
+writes neither History nor Outbox state. Missing or foreign target versions return
+`404 TEMPLATE_VERSION_NOT_FOUND`; an own-Tenant target that is no longer active
+returns `409 TEMPLATE_VERSION_NOT_ACTIVE`. Stale Contract revisions and non-Draft
+states use the existing Contract conflicts. On any conflict, reread the Contract
+and active Template, then make an explicit new request; never silently retarget or
+resubmit values.
+
 Activation, its `ACTIVATED` History entry, and its stable-identity Outbox event
 commit in one PostgreSQL transaction. HTTP never contacts RabbitMQ: success means
 the transaction committed, not that notification processing has finished. The

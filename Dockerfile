@@ -16,7 +16,7 @@ RUN bun run build
 FROM build AS server
 ENV NODE_ENV=production
 USER bun
-CMD ["bun", "apps/api/src/main.ts"]
+CMD ["bun", "apps/api/src/bootstrap/main.ts"]
 
 FROM nginx:1.28-alpine AS web
 COPY infra/nginx.conf /etc/nginx/conf.d/default.conf

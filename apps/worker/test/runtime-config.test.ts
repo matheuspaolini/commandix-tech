@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { WorkerRuntimeConfig } from "../src/runtime-config";
+import { WorkerRuntimeConfig } from "@/platform/runtime-config";
 
 const ENVIRONMENT = {
   DATABASE_URL: "postgresql://database",

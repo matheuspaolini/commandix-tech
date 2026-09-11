@@ -4,7 +4,7 @@ import {
   databaseConnectionConfigFrom,
   RuntimeConfig,
   type RuntimeEnvironment,
-} from "../src/runtime-config";
+} from "@/platform/runtime-config";
 
 const SECRET = "local_development_jwt_secret_with_32_chars";
 const VALID_ENVIRONMENT = {

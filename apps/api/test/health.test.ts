@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { Response } from "express";
 
-import { HealthController, HealthService } from "../src/health";
+import { HealthController, HealthService } from "@/platform/health";
 import {
   type DependencyHealthProbe,
   HealthProbeRunner,
-} from "../src/health-probes";
+} from "@/platform/health-probes";
 
 class PassingHealthProbe implements DependencyHealthProbe {
   async check(): Promise<void> {}

@@ -1,0 +1,1 @@
+ALTER TYPE "ContractHistoryAction" ADD VALUE 'MIGRATED' AFTER 'EDITED';

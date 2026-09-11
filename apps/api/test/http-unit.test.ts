@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { NextFunction, Request, Response } from "express";
 
-import { HttpRequestLogger, RequestContext } from "../src/http";
+import { HttpRequestLogger, RequestContext } from "@/platform/http";
 
 const ACCEPTED_CORRELATION_ID = "AE68EDCD-E14F-4E0F-8A56-0C61D91B069E";
 const GENERATED_CORRELATION_ID = "ae68edcd-e14f-4e0f-8a56-0c61d91b069e";

@@ -3,10 +3,10 @@ import { createPrismaClient } from "@commandix/database";
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 
-import { createApp } from "../src/app";
-import { DatabaseService } from "../src/database";
-import { runtimeConfigFromEnvironment } from "../src/runtime-config";
-import { PrismaOnboardingRepository } from "@/tenant/infrastructure/prisma-onboarding.repository";
+import { createApiModule, createApp } from "@/bootstrap/app";
+import { DatabaseService } from "@/platform/database";
+import { runtimeConfigFromEnvironment } from "@/platform/runtime-config";
+import { PrismaOnboardingRepository } from "@/modules/tenant/infrastructure/prisma-onboarding.repository";
 
 Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
 Bun.env.AUTH_ALLOWED_ORIGINS ??= "http://localhost:8080";
@@ -229,7 +229,10 @@ type ConcurrentOnboardingScenario = Awaited<
 type RollbackScenario = Awaited<ReturnType<typeof createRollbackScenario>>;
 
 beforeAll(async () => {
-  app = await createApp();
+  app = await createApp({
+    rootModule: createApiModule(runtimeConfigFromEnvironment()),
+    writeLog: () => {},
+  });
   await app.init();
 });
 

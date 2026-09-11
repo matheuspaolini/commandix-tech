@@ -3,7 +3,8 @@ import { createPrismaClient } from "@commandix/database";
 import type { INestApplication } from "@nestjs/common";
 import request from "supertest";
 
-import { createApp } from "../src/app";
+import { createApiModule, createApp } from "@/bootstrap/app";
+import { runtimeConfigFromEnvironment } from "@/platform/runtime-config";
 
 Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
 Bun.env.AUTH_ALLOWED_ORIGINS ??= "http://localhost:8080";
@@ -41,7 +42,10 @@ function refresh(cookie: string) {
 }
 
 beforeAll(async () => {
-  app = await createApp();
+  app = await createApp({
+    rootModule: createApiModule(runtimeConfigFromEnvironment()),
+    writeLog: () => {},
+  });
   await app.init();
   await request(app.getHttpServer()).post("/onboarding").send(credentials);
 });

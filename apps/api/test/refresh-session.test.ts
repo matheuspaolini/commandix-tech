@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { AccessTokenService } from "../src/auth/domain/access-token";
-import { AuthLifecycleLogger } from "../src/auth/infrastructure/auth-lifecycle-logger";
+import { AccessTokenService } from "@/modules/auth/domain/access-token";
+import { AuthLifecycleLogger } from "@/modules/auth/infrastructure/auth-lifecycle-logger";
 import {
   createRefreshCredential,
   parseRefreshCredential,
-} from "../src/auth/domain/refresh-credential";
+} from "@/modules/auth/domain/refresh-credential";
 import type {
   CreateRefreshSession,
   CreatedRefreshSession,
@@ -14,8 +14,8 @@ import type {
   RevocationResult,
   RotateRefreshSession,
   RotationResult,
-} from "../src/auth/application/refresh-session/refresh-session.repository";
-import { RefreshSessionService } from "../src/auth/application/refresh-session/refresh-session.service";
+} from "@/modules/auth/application/refresh-session/refresh-session.repository";
+import { RefreshSessionService } from "@/modules/auth/application/refresh-session/refresh-session.service";
 
 const NOW = 1_700_000_000;
 const JWT_SECRET = "local_development_jwt_secret_with_32_chars";

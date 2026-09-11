@@ -122,6 +122,8 @@ type Layer =
   | "application"
   | "infrastructure"
   | "presentation"
+  | "module"
+  | "platform"
   | "bootstrap"
   | "legacy";
 type FileInfo = {
@@ -140,22 +142,27 @@ function classify(file: string): FileInfo {
       layer: "bootstrap",
       path,
     };
-  const [, workspace, , namedFeature = "bootstrap", ...rest] = path.split("/");
-  const feature = rest.length === 0 ? "bootstrap" : namedFeature;
-  const layer = rest.find((part): part is Layer =>
+  const [, workspace, , namespace = "legacy", ...rest] = path.split("/");
+  const normalizedWorkspace = workspace === "api" ? "api" : "worker";
+  if (namespace === "bootstrap")
+    return { workspace: normalizedWorkspace, feature: "bootstrap", layer: "bootstrap", path };
+  if (namespace === "platform")
+    return { workspace: normalizedWorkspace, feature: "platform", layer: "platform", path };
+  if (namespace !== "modules" || !rest[0])
+    return { workspace: normalizedWorkspace, feature: "legacy", layer: "legacy", path };
+  const [feature, ...featurePath] = rest;
+  const layer = featurePath.find((part): part is Layer =>
     ["domain", "application", "infrastructure", "presentation"].includes(part),
   );
   return {
-    workspace: workspace === "api" ? "api" : "worker",
+    workspace: normalizedWorkspace,
     feature,
     layer:
       layer ??
-      (feature === "bootstrap" ||
-      path.endsWith(`/${feature}.module.ts`) ||
+      (path.endsWith(`/${feature}.module.ts`) ||
       path.endsWith(".contract.ts") ||
-      path.endsWith("-contract.ts") ||
-      feature === "bootstrap"
-        ? "bootstrap"
+      path.endsWith("-contract.ts")
+        ? "module"
         : "legacy"),
     path,
   };
@@ -172,11 +179,21 @@ function layerViolation(
     application: ["domain", "application"],
     infrastructure: ["domain", "application", "infrastructure"],
     presentation: ["domain", "application", "presentation"],
+    module: [
+      "domain",
+      "application",
+      "infrastructure",
+      "presentation",
+      "module",
+    ],
+    platform: ["platform"],
     bootstrap: [
       "domain",
       "application",
       "infrastructure",
       "presentation",
+      "module",
+      "platform",
       "bootstrap",
     ],
     legacy: [],
@@ -190,37 +207,52 @@ function isAllowedCrossFeatureImport(
   source: FileInfo,
   target: FileInfo,
 ): boolean {
+  if (
+    source.layer === "bootstrap" &&
+    (target.layer === "module" || target.layer === "platform")
+  )
+    return true;
   const technicalPlatformFiles = new Set([
-    "apps/api/src/database.ts",
-    "apps/api/src/http.ts",
-    "apps/api/src/errors.ts",
-    "apps/api/src/runtime-config.ts",
+    "apps/api/src/platform/database.ts",
+    "apps/api/src/platform/http.ts",
+    "apps/api/src/platform/errors.ts",
+    "apps/api/src/platform/runtime-config.ts",
     "apps/api/src/platform/password-hasher.ts",
-    "apps/worker/src/database.ts",
-    "apps/worker/src/runtime-config.ts",
+    "apps/worker/src/platform/database.ts",
+    "apps/worker/src/platform/runtime-config.ts",
   ]);
   if (
     technicalPlatformFiles.has(target.path) &&
     !["domain", "application"].includes(source.layer)
   )
     return true;
-  if (target.path === "apps/api/src/tenant/tenant.contract.ts")
+  if (target.path === "apps/api/src/modules/tenant/tenant.contract.ts")
     return (
       source.workspace === "api" &&
-      (source.feature === "auth" || source.path === "apps/api/src/seed.ts")
+      (source.feature === "auth" || source.path === "apps/api/src/bootstrap/seed.ts")
     );
-  if (target.path === "apps/api/src/auth/auth.http-contract.ts")
+  if (target.path === "apps/api/src/modules/auth/auth.http-contract.ts")
     return (
       source.workspace === "api" &&
       source.feature !== "auth" &&
       (source.layer === "presentation" || isRootComposition(source))
     );
   if (
-    source.path === "apps/api/src/seed.ts" &&
+    source.path === "apps/api/src/bootstrap/seed.ts" &&
     new Set([
-      "apps/api/src/contract/application/seed-workspaces/seed-workspaces.ts",
-      "apps/api/src/contract/infrastructure/prisma-seed-workspace.repository.ts",
+      "apps/api/src/modules/contract/application/seed-workspaces/seed-workspaces.ts",
+      "apps/api/src/modules/contract/infrastructure/prisma-seed-workspace.repository.ts",
     ]).has(target.path)
+  )
+    return true;
+  if (
+    new Set([
+      "apps/api/src/bootstrap/seed-workspaces.ts",
+      "apps/api/src/bootstrap/prisma-seed-workspace.repository.ts",
+    ]).has(source.path) &&
+    target.workspace === "api" &&
+    target.feature === "contract" &&
+    target.layer === "domain"
   )
     return true;
   return isRootComposition(source) && isFeatureRootModule(target);
@@ -233,8 +265,8 @@ function isPasswordContractException(
   return (
     source.workspace === "api" &&
     new Set([
-      "apps/api/src/tenant/application/onboarding/onboarding.service.ts",
-      "apps/api/src/auth/application/sign-in/auth.service.ts",
+      "apps/api/src/modules/tenant/application/onboarding/onboarding.service.ts",
+      "apps/api/src/modules/auth/application/sign-in/auth.service.ts",
     ]).has(source.path) &&
     target.path === "apps/api/src/platform/password-hasher.ts"
   );
@@ -242,16 +274,12 @@ function isPasswordContractException(
 
 function isRootComposition(source: FileInfo): boolean {
   return (
-    source.path === "apps/api/src/app.ts" ||
-    source.path === "apps/api/src/main.ts" ||
-    source.path === "apps/api/src/seed.ts" ||
-    source.path === "apps/worker/src/worker.module.ts" ||
-    source.path.endsWith(`/${source.feature}/${source.feature}.module.ts`)
+    source.layer === "bootstrap" || source.layer === "module"
   );
 }
 
 function isFeatureRootModule(target: FileInfo): boolean {
-  return target.path.endsWith(`/${target.feature}/${target.feature}.module.ts`);
+  return target.layer === "module";
 }
 
 function isLocalTacticalImport(source: string, target: string): boolean {
@@ -273,29 +301,29 @@ function assertFixtureRules(): void {
   const allowed = importViolation(
     fixture("contract", "application", "create-contract.ts"),
     fixture("contract", "domain", "contract.ts"),
-    "@/contract/domain/contract",
+    "@/modules/contract/domain/contract",
     true,
   );
   const forbiddenLayer = importViolation(
     fixture("contract", "domain", "contract.ts"),
     fixture("contract", "infrastructure", "prisma-contract.ts"),
-    "@/contract/infrastructure/prisma-contract",
+    "@/modules/contract/infrastructure/prisma-contract",
     true,
   );
   const forbiddenFeature = importViolation(
     fixture("contract", "application", "create-contract.ts"),
     fixture("auth", "application", "sign-in.ts"),
-    "@/auth/application/sign-in",
+    "@/modules/auth/application/sign-in",
     true,
   );
   const packageLeak = importViolation(
     join(ROOT, "packages/database/src/index.ts"),
     fixture("contract", "domain", "contract.ts"),
-    "apps/api/src/contract/domain/contract",
+    "apps/api/src/modules/contract/domain/contract",
     true,
   );
   const allowedPasswordContract = importViolation(
-    join(ROOT, "apps/api/src/auth/application/sign-in/auth.service.ts"),
+    join(ROOT, "apps/api/src/modules/auth/application/sign-in/auth.service.ts"),
     join(ROOT, "apps/api/src/platform/password-hasher.ts"),
     "@/platform/password-hasher",
     true,
@@ -307,42 +335,42 @@ function assertFixtureRules(): void {
     true,
   );
   const allowedRootWiring = importViolation(
-    join(ROOT, "apps/api/src/contract/contract.module.ts"),
-    join(ROOT, "apps/api/src/auth/auth.module.ts"),
-    "@/auth/auth.module",
+    join(ROOT, "apps/api/src/modules/contract/contract.module.ts"),
+    join(ROOT, "apps/api/src/modules/auth/auth.module.ts"),
+    "@/modules/auth/auth.module",
     true,
   );
   const rejectedRootWiring = importViolation(
-    join(ROOT, "apps/api/src/app.ts"),
-    join(ROOT, "apps/api/src/auth/presentation/access-token.guard.ts"),
-    "@/auth/presentation/access-token.guard",
+    join(ROOT, "apps/api/src/bootstrap/app.ts"),
+    join(ROOT, "apps/api/src/modules/auth/presentation/access-token.guard.ts"),
+    "@/modules/auth/presentation/access-token.guard",
     true,
   );
   const allowedParentRelative = importViolation(
     join(
       ROOT,
-      "apps/api/src/contract/application/edit-draft-values/nested/fixture.ts",
+      "apps/api/src/modules/contract/application/edit-draft-values/nested/fixture.ts",
     ),
-    join(ROOT, "apps/api/src/contract/application/edit-draft-values/port.ts"),
+    join(ROOT, "apps/api/src/modules/contract/application/edit-draft-values/port.ts"),
     "../port",
     true,
   );
   const rejectedParentRelative = importViolation(
     join(
       ROOT,
-      "apps/api/src/contract/application/edit-draft-values/nested/fixture.ts",
+      "apps/api/src/modules/contract/application/edit-draft-values/nested/fixture.ts",
     ),
     join(
       ROOT,
-      "apps/api/src/contract/application/read-contract-detail/query.ts",
+      "apps/api/src/modules/contract/application/read-contract-detail/query.ts",
     ),
     "../../read-contract-detail/query",
     true,
   );
   const rejectedSeedCrossing = importViolation(
-    join(ROOT, "apps/api/src/seed.ts"),
-    join(ROOT, "apps/api/src/contract/presentation/contract.controller.ts"),
-    "@/contract/presentation/contract.controller",
+    join(ROOT, "apps/api/src/bootstrap/seed.ts"),
+    join(ROOT, "apps/api/src/modules/contract/presentation/contract.controller.ts"),
+    "@/modules/contract/presentation/contract.controller",
     true,
   );
   if (
@@ -364,5 +392,5 @@ function assertFixtureRules(): void {
 }
 
 function fixture(feature: string, layer: Layer, name: string): string {
-  return join(ROOT, "apps/api/src", feature, layer, name);
+  return join(ROOT, "apps/api/src/modules", feature, layer, name);
 }

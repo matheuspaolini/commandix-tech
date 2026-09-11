@@ -11,9 +11,9 @@ import {
 } from "@nestjs/common";
 import request from "supertest";
 
-import type { AuthenticatedRequest } from "../src/auth/presentation/access-token.guard";
-import { Roles, RolesGuard } from "../src/auth/presentation/roles";
-import { createApp } from "../src/app";
+import type { AuthenticatedRequest } from "@/modules/auth/presentation/access-token.guard";
+import { Roles, RolesGuard } from "@/modules/auth/presentation/roles";
+import { createApp } from "@/bootstrap/app";
 
 class HeaderIdentityGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {

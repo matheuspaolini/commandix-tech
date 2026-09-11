@@ -14,10 +14,10 @@
   },
   "scripts": {
     "typecheck": "bun --bun tsc -p tsconfig.json",
-    "start": "bun src/main.ts",
-    "dev": "bun --watch src/main.ts",
+    "start": "bun src/bootstrap/main.ts",
+    "dev": "bun --watch src/bootstrap/main.ts",
     "test": "bun test ./src ./test",
-    "replay:contract-activated": "bun src/replay-contract-activated.ts"
+    "replay:contract-activated": "bun src/bootstrap/replay-contract-activated.ts"
   },
   "devDependencies": {
     "typescript": "catalog:",

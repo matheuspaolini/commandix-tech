@@ -57,9 +57,9 @@ SQL
 "${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs publish-database-failure
 "${compose[@]}" exec -T postgres psql -U postgres -d commandix -v ON_ERROR_STOP=1 \
   -c 'GRANT INSERT ON notification_logs TO commandix_runtime'
-"${compose[@]}" exec -T api bun apps/worker/src/replay-contract-activated.ts /app/notification-replay-event.json
+"${compose[@]}" exec -T api bun apps/worker/src/bootstrap/replay-contract-activated.ts /app/notification-replay-event.json
 "${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs verify-replay
-"${compose[@]}" exec -T api bun apps/worker/src/replay-contract-activated.ts /app/notification-replay-event.json
+"${compose[@]}" exec -T api bun apps/worker/src/bootstrap/replay-contract-activated.ts /app/notification-replay-event.json
 "${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs verify-replay
 "${compose[@]}" logs --no-log-prefix worker | bun -e '
 import assert from "node:assert/strict";

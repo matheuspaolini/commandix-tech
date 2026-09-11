@@ -1,3 +1,5 @@
+import { Global, Module } from "@nestjs/common";
+
 export interface PasswordHasher {
   hash(password: string): Promise<string>;
   verify(password: string, hash: string): Promise<boolean>;
@@ -18,3 +20,15 @@ export class BunPasswordHasher implements PasswordHasher {
     return Bun.password.verify(password, hash);
   }
 }
+
+@Global()
+@Module({
+  providers: [
+    {
+      provide: PASSWORD_HASHER,
+      useFactory: () => new BunPasswordHasher(),
+    },
+  ],
+  exports: [PASSWORD_HASHER],
+})
+export class PlatformSecurityModule {}
