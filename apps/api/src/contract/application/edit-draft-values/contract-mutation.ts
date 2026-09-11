@@ -4,7 +4,10 @@ import {
 } from "@commandix/contract-events";
 import type { ContractSnapshot } from "@/contract/domain/contract-snapshot";
 import type { ContractValues } from "@/contract/domain/contract-values";
-import type { ContractDetail, ContractStatus } from "@/contract/application/read-contract-detail/read-contract-detail";
+import type {
+  ContractDetail,
+  ContractStatus,
+} from "@/contract/application/read-contract-detail/read-contract-detail";
 
 export type LockedContract = {
   id: string;

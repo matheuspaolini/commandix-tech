@@ -15,7 +15,10 @@ import {
   ContractRevisionConflict,
   ContractStatusConflict,
 } from "@/contract/domain/contract-errors";
-import type { ContractDetail, ContractStatus } from "@/contract/application/read-contract-detail/read-contract-detail";
+import type {
+  ContractDetail,
+  ContractStatus,
+} from "@/contract/application/read-contract-detail/read-contract-detail";
 
 export {
   ContractNotFound,

@@ -5,7 +5,10 @@ import {
   ContractStatusConflict,
 } from "@/contract/domain/contract-errors";
 import type { ContractSnapshot } from "@/contract/domain/contract-snapshot";
-import { contractValuesEqual, resolveDraftEditValues } from "@/contract/domain/contract-values";
+import {
+  contractValuesEqual,
+  resolveDraftEditValues,
+} from "@/contract/domain/contract-values";
 import type { ContractDetail } from "@/contract/application/read-contract-detail/read-contract-detail";
 import {
   ContractEntity,

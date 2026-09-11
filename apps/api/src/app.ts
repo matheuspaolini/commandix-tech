@@ -32,28 +32,28 @@ import { TenantModule } from "./tenant/tenant.module";
 
 export function createApiModule(config: RuntimeConfig): DynamicModule {
   @Module({
-  imports: [
-    RuntimeConfigModule.register(config),
-    DatabaseModule,
-    AuthModule,
-    TenantModule,
-    ContractModule,
-  ],
-  controllers: [HealthController],
-  providers: [
-    HealthService,
-    HealthProbeRunner,
-    PostgreSqlHealthProbe,
-    RabbitMqHealthProbe,
-    {
-      provide: DATABASE_HEALTH_PROBE,
-      useExisting: PostgreSqlHealthProbe,
-    },
-    {
-      provide: BROKER_HEALTH_PROBE,
-      useExisting: RabbitMqHealthProbe,
-    },
-  ],
+    imports: [
+      RuntimeConfigModule.register(config),
+      DatabaseModule,
+      AuthModule,
+      TenantModule,
+      ContractModule,
+    ],
+    controllers: [HealthController],
+    providers: [
+      HealthService,
+      HealthProbeRunner,
+      PostgreSqlHealthProbe,
+      RabbitMqHealthProbe,
+      {
+        provide: DATABASE_HEALTH_PROBE,
+        useExisting: PostgreSqlHealthProbe,
+      },
+      {
+        provide: BROKER_HEALTH_PROBE,
+        useExisting: RabbitMqHealthProbe,
+      },
+    ],
   })
   class AppModule {}
   return { module: AppModule };

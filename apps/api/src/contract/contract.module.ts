@@ -24,7 +24,10 @@ import { TransitionStatus } from "@/contract/application/transition-status/trans
 import { CONTRACT_MUTATION_TRANSACTIONS } from "@/contract/application/edit-draft-values/contract-mutation";
 import { EditDraftValues } from "@/contract/application/edit-draft-values/edit-draft-values";
 import { PrismaContractRegisterRepository } from "@/contract/infrastructure/prisma-contract-register.repository";
-import { CONTRACT_REGISTER_REPOSITORY, ListContracts } from "@/contract/application/list-contracts/list-contracts";
+import {
+  CONTRACT_REGISTER_REPOSITORY,
+  ListContracts,
+} from "@/contract/application/list-contracts/list-contracts";
 import { PrismaContractHistoryRepository } from "@/contract/infrastructure/prisma-contract-history.repository";
 import {
   CONTRACT_HISTORY_REPOSITORY,

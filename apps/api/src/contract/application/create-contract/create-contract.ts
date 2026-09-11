@@ -1,5 +1,8 @@
 import type { TemplateDefinition } from "@/contract/domain/template-definition";
-import { resolveContractValues, type ContractValues } from "@/contract/domain/contract-values";
+import {
+  resolveContractValues,
+  type ContractValues,
+} from "@/contract/domain/contract-values";
 import type { ContractSnapshot } from "@/contract/domain/contract-snapshot";
 
 export type NewContract = ContractSnapshot & {

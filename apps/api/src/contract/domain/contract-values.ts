@@ -1,4 +1,7 @@
-import type { TemplateDefinition, TemplateField } from "@/contract/domain/template-definition";
+import type {
+  TemplateDefinition,
+  TemplateField,
+} from "@/contract/domain/template-definition";
 import { isCalendarDate } from "@/contract/domain/template-definition";
 
 export type ContractValue = string | number | boolean;

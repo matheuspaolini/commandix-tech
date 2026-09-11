@@ -208,7 +208,12 @@ export class HistoryEntity {
     contractId: ContractIdentifier;
     revision: number;
   }): HistoryEntity {
-    return new HistoryEntity(input.id, input.tenantId, input.contractId, input.revision);
+    return new HistoryEntity(
+      input.id,
+      input.tenantId,
+      input.contractId,
+      input.revision,
+    );
   }
 }
 

@@ -21,9 +21,15 @@ import { Roles, RolesGuard } from "@/auth/auth.http-contract";
 import { PublicHttpException } from "@/errors";
 import { ContractCreationLogger } from "./contract-creation.logger";
 import { InvalidContractValues } from "@/contract/domain/contract-values";
-import { ActiveTemplateRequired, CreateContract } from "@/contract/application/create-contract/create-contract";
+import {
+  ActiveTemplateRequired,
+  CreateContract,
+} from "@/contract/application/create-contract/create-contract";
 import { CreateContractDto } from "@/contract/presentation/create-contract.dto";
-import { ContractNotFound, ReadContractDetail } from "@/contract/application/read-contract-detail/read-contract-detail";
+import {
+  ContractNotFound,
+  ReadContractDetail,
+} from "@/contract/application/read-contract-detail/read-contract-detail";
 import { ActivateContractDto } from "@/contract/presentation/activate-contract.dto";
 import { CloseContractDto } from "@/contract/presentation/close-contract.dto";
 import { ContractTransitionLogger } from "./contract-transition.logger";
@@ -33,7 +39,10 @@ import {
   ContractStatusConflict,
   TransitionStatus,
 } from "@/contract/application/transition-status/transition-status";
-import { ListContracts, parseContractRegisterQuery } from "@/contract/application/list-contracts/list-contracts";
+import {
+  ListContracts,
+  parseContractRegisterQuery,
+} from "@/contract/application/list-contracts/list-contracts";
 import { InvalidContractPagination } from "@/contract/application/list-contracts/contract-register-cursor";
 import { ReadContractHistory } from "@/contract/application/read-contract-history/read-contract-history";
 import { EditDraftValuesDto } from "@/contract/presentation/edit-draft-values.dto";
