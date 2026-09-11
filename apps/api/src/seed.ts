@@ -3,7 +3,7 @@ import { canonicalIdentity } from "@/tenant/tenant.contract";
 import { PrismaSeedWorkspaceRepository } from "@/contract/infrastructure/prisma-seed-workspace.repository";
 import { SeedWorkspaces } from "@/contract/application/seed-workspaces/seed-workspaces";
 import { DatabaseService } from "./database";
-import { runtimeConfigFromEnvironment } from "./runtime-config";
+import { databaseConnectionConfigFromEnvironment } from "./runtime-config";
 
 const DEVELOPMENT_PASSWORD = "Commandix-demo-2026!";
 const SEEDED_TEMPLATE = {
@@ -49,7 +49,9 @@ const SEED_WORKSPACES = ["acme", "globex"].map((slug) => ({
 }));
 
 async function seed(): Promise<void> {
-  const database = new DatabaseService(runtimeConfigFromEnvironment());
+  const database = new DatabaseService(
+    databaseConnectionConfigFromEnvironment(),
+  );
   try {
     const workspaces = new SeedWorkspaces(
       new PrismaSeedWorkspaceRepository(database),

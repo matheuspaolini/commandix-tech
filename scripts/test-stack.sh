@@ -36,6 +36,11 @@ END $$;
 DELETE FROM tenants WHERE slug = 'unrelated-seed-data';
 SQL
 "${compose[@]}" exec -T api bun scripts/assert-health.mjs ok up up
+"${compose[@]}" stop -t 10 worker
+"${compose[@]}" exec -T postgres psql -U postgres -d commandix -v ON_ERROR_STOP=1 \
+  -c 'DELETE FROM contract_activation_outbox'
+"${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs clear-fixtures
+"${compose[@]}" start worker
 "${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs
 # A persistent delivery queued without a consumer must survive a broker restart.
 "${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs prepare-database-failure
@@ -44,7 +49,7 @@ SQL
 "${compose[@]}" restart rabbitmq
 "${compose[@]}" up -d --wait --wait-timeout 180 --no-recreate rabbitmq
 "${compose[@]}" exec -T rabbitmq rabbitmq-diagnostics -q check_running
-"${compose[@]}" start worker
+"${compose[@]}" up -d --wait --wait-timeout 180 --no-recreate worker
 "${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs verify-replay
 "${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs prepare-database-failure
 "${compose[@]}" exec -T postgres psql -U postgres -d commandix -v ON_ERROR_STOP=1 \
@@ -96,7 +101,7 @@ if [[ "$postgres_ready" != true ]]; then
   printf '%s\n' 'PostgreSQL did not recover after the acknowledgement test' >&2
   exit 1
 fi
-"${compose[@]}" start worker
+"${compose[@]}" up -d --wait --wait-timeout 180 --no-recreate worker
 "${compose[@]}" exec -T api bun apps/worker/scripts/assert-notification-consumer.mjs verify-replay
 web_address=$("${compose[@]}" port web 80)
 bun scripts/assert-health.mjs ok up up "http://$web_address/api/health"

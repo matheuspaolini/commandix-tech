@@ -10,6 +10,10 @@ export type RuntimeEnvironment = {
   AUTH_COOKIE_SECURE?: string;
 };
 
+export type DatabaseConnectionConfig = {
+  databaseUrl: string;
+};
+
 export class RuntimeConfig {
   private constructor(
     readonly databaseUrl: string,
@@ -49,6 +53,18 @@ export function runtimeConfigFromEnvironment(): RuntimeConfig {
     AUTH_ALLOWED_ORIGINS: Bun.env.AUTH_ALLOWED_ORIGINS,
     AUTH_COOKIE_SECURE: Bun.env.AUTH_COOKIE_SECURE,
   });
+}
+
+export function databaseConnectionConfigFromEnvironment(): DatabaseConnectionConfig {
+  return databaseConnectionConfigFrom({ DATABASE_URL: Bun.env.DATABASE_URL });
+}
+
+export function databaseConnectionConfigFrom(
+  environment: Pick<RuntimeEnvironment, "DATABASE_URL">,
+): DatabaseConnectionConfig {
+  return {
+    databaseUrl: requiredValue(environment.DATABASE_URL, "DATABASE_URL"),
+  };
 }
 
 function parseBoolean(value: string, variableName: string): boolean {

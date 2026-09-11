@@ -11,6 +11,7 @@ import { IsString } from "class-validator";
 import request from "supertest";
 
 import { AppModule, createApp } from "../src/app";
+import { HealthController, HealthService } from "../src/health";
 
 Bun.env.JWT_SECRET ??= "local_development_jwt_secret_with_32_chars";
 Bun.env.AUTH_ALLOWED_ORIGINS ??= "http://localhost:8080";
@@ -47,7 +48,20 @@ class ProbeController {
   }
 }
 
-@Module({ imports: [AppModule], controllers: [ProbeController] })
+const HEALTHY_REPORT = {
+  status: "ok",
+  dependencies: { database: "up", broker: "up" },
+} as const;
+
+@Module({
+  controllers: [ProbeController, HealthController],
+  providers: [
+    {
+      provide: HealthService,
+      useValue: { check: async () => HEALTHY_REPORT },
+    },
+  ],
+})
 class TestModule {}
 
 const logs: string[] = [];

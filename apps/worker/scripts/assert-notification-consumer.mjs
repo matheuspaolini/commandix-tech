@@ -8,7 +8,9 @@ const queue = "commandix.notifications.contract-activated.v1";
 const deadLetterExchange = "commandix.notifications.dlx";
 const deadLetterQueue = "commandix.notifications.contract-activated.v1.dlq";
 const deadlineMs = 20_000;
-const client = createPrismaClient();
+const databaseUrl = Bun.env.DATABASE_URL;
+if (!databaseUrl) throw new Error("Missing DATABASE_URL");
+const client = createPrismaClient({ datasourceUrl: databaseUrl });
 const connection = await connect(Bun.env.RABBITMQ_URL);
 const channel = await connection.createConfirmChannel();
 
@@ -16,6 +18,8 @@ try {
   await assertTopology();
   if (process.argv[2] === "prepare-database-failure") {
     await prepareDatabaseFailure();
+  } else if (process.argv[2] === "clear-fixtures") {
+    await clearFixtures();
   } else if (process.argv[2] === "publish-database-failure") {
     await publishDatabaseFailure();
   } else if (process.argv[2] === "verify-replay") {
@@ -53,6 +57,7 @@ async function assertExactTopology() {
 }
 
 async function verifyDelivery() {
+  await drainQueue(deadLetterQueue);
   const fixture = await createFixture();
   const foreignFixture = await createFixture();
   const active = event(fixture.tenantId, fixture.activeContractId, 2);
@@ -139,6 +144,11 @@ async function prepareDatabaseFailure() {
     JSON.stringify(activation),
   );
   console.log(JSON.stringify({ eventId: activation.eventId }));
+}
+
+async function clearFixtures() {
+  await drainQueue(queue);
+  await drainQueue(deadLetterQueue);
 }
 
 async function publishDatabaseFailure() {
@@ -266,6 +276,14 @@ async function takeDeadLetters(count) {
     return deliveries.length === count;
   }, `${count} dead-letter deliveries`);
   return deliveries;
+}
+
+async function drainQueue(name) {
+  while (true) {
+    const delivery = await channel.get(name, { noAck: false });
+    if (!delivery) return;
+    channel.ack(delivery);
+  }
 }
 
 async function waitFor(predicate, description) {

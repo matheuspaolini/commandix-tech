@@ -8,6 +8,9 @@ import type { DatabaseService } from "@/database";
 const client = createPrismaClient({
   datasourceUrl: Bun.env.TEST_DATABASE_URL ?? Bun.env.DATABASE_URL ?? "",
 });
+const runtimeClient = createPrismaClient({
+  datasourceUrl: Bun.env.DATABASE_URL ?? "",
+});
 let acmeTenantId: string;
 let globexVersionId: string;
 let acmeActorId: string;
@@ -28,7 +31,7 @@ beforeAll(async () => {
   globexVersionId = globex.logicalTemplate!.activeVersionId!;
 });
 afterAll(async () => {
-  await client.$disconnect();
+  await Promise.all([client.$disconnect(), runtimeClient.$disconnect()]);
 });
 
 async function outcome(operation: () => Promise<unknown>) {
@@ -165,7 +168,7 @@ describe("Contract persistence invariants", () => {
   test("runtime credentials cannot update History", async () => {
     const history = await ensureHistory();
     const result = await outcome(() =>
-      client.contractHistory.update({
+      runtimeClient.contractHistory.update({
         where: { id: history.id },
         data: { revision: 2 },
       }),
@@ -182,7 +185,7 @@ describe("Contract persistence invariants", () => {
   test("runtime credentials cannot delete History", async () => {
     const history = await ensureHistory();
     const result = await outcome(() =>
-      client.contractHistory.delete({ where: { id: history.id } }),
+      runtimeClient.contractHistory.delete({ where: { id: history.id } }),
     );
     const persisted = await client.contractHistory.count({
       where: { id: history.id },
@@ -196,7 +199,7 @@ describe("Contract persistence invariants", () => {
   test("runtime credentials cannot truncate History", async () => {
     const history = await ensureHistory();
     const result = await outcome(() =>
-      client.$executeRawUnsafe('TRUNCATE TABLE "contract_history"'),
+      runtimeClient.$executeRawUnsafe('TRUNCATE TABLE "contract_history"'),
     );
     const persisted = await client.contractHistory.count({
       where: { id: history.id },

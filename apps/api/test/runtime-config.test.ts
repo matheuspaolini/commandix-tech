@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test";
 
-import { RuntimeConfig, type RuntimeEnvironment } from "../src/runtime-config";
+import {
+  databaseConnectionConfigFrom,
+  RuntimeConfig,
+  type RuntimeEnvironment,
+} from "../src/runtime-config";
 
 const SECRET = "local_development_jwt_secret_with_32_chars";
 const VALID_ENVIRONMENT = {
@@ -71,6 +75,13 @@ function capturedError(overrides: Partial<RuntimeEnvironment>): Error {
 }
 
 describe("RuntimeConfig", () => {
+  test("keeps seed database configuration independent of API runtime settings", () => {
+    expect(
+      databaseConnectionConfigFrom({
+        DATABASE_URL: VALID_ENVIRONMENT.DATABASE_URL,
+      }),
+    ).toStrictEqual({ databaseUrl: VALID_ENVIRONMENT.DATABASE_URL });
+  });
   test("creates a typed configuration from a valid environment", () => {
     const config = runtimeConfig();
 
