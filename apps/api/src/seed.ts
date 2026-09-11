@@ -1,4 +1,5 @@
-import { BunPasswordHasher } from "./platform/password-hasher";
+import { BunPasswordHasher } from "@/platform/password-hasher";
+import { canonicalIdentity } from "@/tenant/tenant.contract";
 import { canonicalTemplateDefinition } from "@/contract/domain/template-definition";
 import { PrismaSeedWorkspaceRepository } from "@/contract/infrastructure/prisma-seed-workspace.repository";
 import { SeedWorkspaces } from "@/contract/application/seed-workspaces/seed-workspaces";
@@ -54,6 +55,7 @@ async function seed(): Promise<void> {
     const workspaces = new SeedWorkspaces(
       new PrismaSeedWorkspaceRepository(database),
       new BunPasswordHasher(),
+      { canonicalize: canonicalIdentity },
     );
     const counts = await workspaces.execute(
       SEED_WORKSPACES,

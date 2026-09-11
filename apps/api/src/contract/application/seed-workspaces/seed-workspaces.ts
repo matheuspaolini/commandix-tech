@@ -1,8 +1,7 @@
-import type { PasswordHasher } from "@/platform/password-hasher";
-import { canonicalIdentity, type Role } from "@/tenant/tenant.contract";
 import type { TemplateDefinition } from "@/contract/domain/template-definition";
 
-export type SeedUser = { email: string; role: Role };
+export type SeedRole = "ADMIN" | "MEMBER";
+export type SeedUser = { email: string; role: SeedRole };
 export type SeedWorkspace = {
   slug: string;
   users: readonly SeedUser[];
@@ -15,6 +14,18 @@ export type SeedCounts = {
   templatesCreated: number;
 };
 
+export interface SeedPasswordHasher {
+  hash(password: string): Promise<string>;
+}
+
+export interface SeedIdentityCanonicalizer {
+  canonicalize(input: { slug: string; email: string; password: string }): {
+    slug: string;
+    email: string;
+    password: string;
+  };
+}
+
 export interface SeedWorkspaceRepository {
   ensureTenant(slug: string): Promise<{ id: string; created: boolean }>;
   hasUser(tenantId: string, email: string): Promise<boolean>;
@@ -22,7 +33,7 @@ export interface SeedWorkspaceRepository {
     tenantId: string;
     email: string;
     passwordHash: string;
-    role: Role;
+    role: SeedRole;
   }): Promise<boolean>;
   ensureTemplate(
     tenantId: string,
@@ -33,7 +44,8 @@ export interface SeedWorkspaceRepository {
 export class SeedWorkspaces {
   constructor(
     private readonly repository: SeedWorkspaceRepository,
-    private readonly passwords: PasswordHasher,
+    private readonly passwords: SeedPasswordHasher,
+    private readonly identities: SeedIdentityCanonicalizer,
   ) {}
 
   async execute(
@@ -47,7 +59,7 @@ export class SeedWorkspaces {
     };
 
     for (const workspace of workspaces) {
-      const canonicalWorkspace = canonicalIdentity({
+      const canonicalWorkspace = this.identities.canonicalize({
         slug: workspace.slug,
         email: workspace.users[0]?.email ?? "",
         password,
@@ -58,7 +70,7 @@ export class SeedWorkspaces {
       if (tenant.created) counts.tenantsCreated += 1;
 
       for (const user of workspace.users) {
-        const identity = canonicalIdentity({
+        const identity = this.identities.canonicalize({
           slug: workspace.slug,
           email: user.email,
           password,

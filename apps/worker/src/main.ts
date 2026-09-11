@@ -2,7 +2,7 @@ import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
 import { type MicroserviceOptions, Transport } from "@nestjs/microservices";
 import { CONTRACT_ACTIVATED_QUEUE } from "@commandix/contract-events";
-import { RabbitMqTopology } from "@/notification/infrastructure/rabbitmq-topology";
+import { RabbitMqTopology } from "@/rabbitmq-topology";
 import { workerRuntimeConfigFromEnvironment } from "@/runtime-config";
 import { createWorkerModule } from "@/worker.module";
 

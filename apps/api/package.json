@@ -20,7 +20,7 @@
     "start": "bun src/main.ts",
     "dev": "bun --watch src/main.ts",
     "seed": "bun src/seed.ts",
-    "test": "bun test ./src ./test"
+    "test": "bun test"
   },
   "devDependencies": {
     "typescript": "catalog:",

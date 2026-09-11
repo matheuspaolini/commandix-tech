@@ -1,12 +1,14 @@
 import { Prisma } from "@commandix/database";
 
-import type { Role } from "@/tenant/tenant.contract";
 import { DatabaseService } from "@/database";
 import {
   canonicalTemplateDefinition,
   type TemplateDefinition,
 } from "@/contract/domain/template-definition";
-import type { SeedWorkspaceRepository } from "@/contract/application/seed-workspaces/seed-workspaces";
+import type {
+  SeedRole,
+  SeedWorkspaceRepository,
+} from "@/contract/application/seed-workspaces/seed-workspaces";
 
 export class AmbiguousSeedTemplate extends Error {}
 
@@ -48,7 +50,7 @@ export class PrismaSeedWorkspaceRepository implements SeedWorkspaceRepository {
     tenantId: string;
     email: string;
     passwordHash: string;
-    role: Role;
+    role: SeedRole;
   }): Promise<boolean> {
     try {
       await this.database.client.user.create({ data: input });

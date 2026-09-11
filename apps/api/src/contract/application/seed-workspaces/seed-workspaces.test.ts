@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import type { PasswordHasher } from "@/platform/password-hasher";
 import {
+  type SeedIdentityCanonicalizer,
+  type SeedPasswordHasher,
   type SeedWorkspaceRepository,
   SeedWorkspaces,
 } from "@/contract/application/seed-workspaces/seed-workspaces";
@@ -21,18 +22,22 @@ const WORKSPACES = [
   },
 ];
 
-class StubPasswordHasher implements PasswordHasher {
+class StubPasswordHasher implements SeedPasswordHasher {
   hashed: string[] = [];
 
   async hash(password: string): Promise<string> {
     this.hashed.push(password);
     return `hash:${password}`;
   }
-
-  async verify(): Promise<boolean> {
-    return false;
-  }
 }
+
+const IDENTITIES: SeedIdentityCanonicalizer = {
+  canonicalize: ({ slug, email, password }) => ({
+    slug: slug.trim().toLowerCase(),
+    email: email.trim().toLowerCase(),
+    password,
+  }),
+};
 
 class RecordingSeedRepository implements SeedWorkspaceRepository {
   readonly users = new Set<string>();
@@ -61,7 +66,11 @@ class RecordingSeedRepository implements SeedWorkspaceRepository {
 describe("SeedWorkspaces", () => {
   test("creates every missing seed record", async () => {
     const repository = new RecordingSeedRepository();
-    const service = new SeedWorkspaces(repository, new StubPasswordHasher());
+    const service = new SeedWorkspaces(
+      repository,
+      new StubPasswordHasher(),
+      IDENTITIES,
+    );
 
     expect(
       await service.execute(WORKSPACES, "Commandix-demo-2026!"),
@@ -76,7 +85,7 @@ describe("SeedWorkspaces", () => {
     const repository = new RecordingSeedRepository();
     repository.users.add("admin@acme.test");
     const passwords = new StubPasswordHasher();
-    const service = new SeedWorkspaces(repository, passwords);
+    const service = new SeedWorkspaces(repository, passwords, IDENTITIES);
     await service.execute(WORKSPACES, "Commandix-demo-2026!");
 
     expect(passwords.hashed).toStrictEqual(["Commandix-demo-2026!"]);

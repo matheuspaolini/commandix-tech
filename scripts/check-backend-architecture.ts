@@ -102,7 +102,11 @@ function importViolation(
     if (targetInfo.workspace === "package") return undefined;
     return "apps must not import another app's source";
   }
-  if (specifier.startsWith("../") && strict)
+  if (
+    specifier.startsWith("../") &&
+    strict &&
+    !isLocalTacticalImport(source, target)
+  )
     return "parent-relative internal imports are forbidden";
   if (isPasswordContractException(sourceInfo, targetInfo)) return undefined;
   if (!strict || sourceInfo.feature === targetInfo.feature) {
@@ -136,7 +140,8 @@ function classify(file: string): FileInfo {
       layer: "bootstrap",
       path,
     };
-  const [, workspace, , feature = "bootstrap", ...rest] = path.split("/");
+  const [, workspace, , namedFeature = "bootstrap", ...rest] = path.split("/");
+  const feature = rest.length === 0 ? "bootstrap" : namedFeature;
   const layer = rest.find((part): part is Layer =>
     ["domain", "application", "infrastructure", "presentation"].includes(part),
   );
@@ -145,7 +150,7 @@ function classify(file: string): FileInfo {
     feature,
     layer:
       layer ??
-      (path.split("/").length === 4 ||
+      (feature === "bootstrap" ||
       path.endsWith(`/${feature}.module.ts`) ||
       path.endsWith(".contract.ts") ||
       path.endsWith("-contract.ts") ||
@@ -190,23 +195,30 @@ function isAllowedCrossFeatureImport(
     "apps/api/src/http.ts",
     "apps/api/src/errors.ts",
     "apps/api/src/runtime-config.ts",
+    "apps/api/src/platform/password-hasher.ts",
     "apps/worker/src/database.ts",
+    "apps/worker/src/runtime-config.ts",
   ]);
   if (
     technicalPlatformFiles.has(target.path) &&
     !["domain", "application"].includes(source.layer)
   )
     return true;
-  if (source.layer === "bootstrap") return true;
-  const contracts = new Set([
-    "apps/api/src/tenant/tenant.contract.ts",
-    "apps/api/src/auth/auth.http-contract.ts",
-  ]);
-  if (contracts.has(target.path)) return true;
-  const targetIsRootModule = target.path.endsWith(
-    `/${target.feature}.module.ts`,
+  if (target.path === "apps/api/src/tenant/tenant.contract.ts")
+    return (
+      source.workspace === "api" &&
+      (source.feature === "auth" || source.path === "apps/api/src/seed.ts")
+    );
+  if (target.path === "apps/api/src/auth/auth.http-contract.ts")
+    return (
+      source.workspace === "api" &&
+      source.feature !== "auth" &&
+      (source.layer === "presentation" || isRootComposition(source))
+    );
+  return (
+    (isRootComposition(source) && isFeatureRootModule(target)) ||
+    source.path === "apps/api/src/seed.ts"
   );
-  return source.layer === "bootstrap" && targetIsRootModule;
 }
 
 function isPasswordContractException(
@@ -215,9 +227,41 @@ function isPasswordContractException(
 ): boolean {
   return (
     source.workspace === "api" &&
-    source.layer === "application" &&
+    new Set([
+      "apps/api/src/tenant/application/onboarding/onboarding.service.ts",
+      "apps/api/src/auth/application/sign-in/auth.service.ts",
+    ]).has(source.path) &&
     target.path === "apps/api/src/platform/password-hasher.ts"
   );
+}
+
+function isRootComposition(source: FileInfo): boolean {
+  return (
+    source.path === "apps/api/src/app.ts" ||
+    source.path === "apps/api/src/main.ts" ||
+    source.path === "apps/api/src/seed.ts" ||
+    source.path === "apps/worker/src/worker.module.ts" ||
+    source.path.endsWith(`/${source.feature}/${source.feature}.module.ts`)
+  );
+}
+
+function isFeatureRootModule(target: FileInfo): boolean {
+  return target.path.endsWith(`/${target.feature}/${target.feature}.module.ts`);
+}
+
+function isLocalTacticalImport(source: string, target: string): boolean {
+  const sourceFolder = tacticalFolder(source);
+  return sourceFolder !== undefined && sourceFolder === tacticalFolder(target);
+}
+
+function tacticalFolder(file: string): string | undefined {
+  const parts = relative(ROOT, file).replaceAll("\\", "/").split("/");
+  const layerIndex = parts.findIndex((part) =>
+    ["domain", "application", "infrastructure", "presentation"].includes(part),
+  );
+  const operation = parts[layerIndex + 1];
+  if (layerIndex === -1 || !operation) return undefined;
+  return parts.slice(0, layerIndex + 2).join("/");
 }
 
 function assertFixtureRules(): void {
@@ -245,7 +289,63 @@ function assertFixtureRules(): void {
     "apps/api/src/contract/domain/contract",
     true,
   );
-  if (allowed || !forbiddenLayer || !forbiddenFeature || !packageLeak)
+  const allowedPasswordContract = importViolation(
+    join(ROOT, "apps/api/src/auth/application/sign-in/auth.service.ts"),
+    join(ROOT, "apps/api/src/platform/password-hasher.ts"),
+    "@/platform/password-hasher",
+    true,
+  );
+  const rejectedPasswordContract = importViolation(
+    fixture("contract", "application", "create-contract.ts"),
+    join(ROOT, "apps/api/src/platform/password-hasher.ts"),
+    "@/platform/password-hasher",
+    true,
+  );
+  const allowedRootWiring = importViolation(
+    join(ROOT, "apps/api/src/contract/contract.module.ts"),
+    join(ROOT, "apps/api/src/auth/auth.module.ts"),
+    "@/auth/auth.module",
+    true,
+  );
+  const rejectedRootWiring = importViolation(
+    join(ROOT, "apps/api/src/app.ts"),
+    join(ROOT, "apps/api/src/auth/presentation/access-token.guard.ts"),
+    "@/auth/presentation/access-token.guard",
+    true,
+  );
+  const allowedParentRelative = importViolation(
+    join(
+      ROOT,
+      "apps/api/src/contract/application/edit-draft-values/nested/fixture.ts",
+    ),
+    join(ROOT, "apps/api/src/contract/application/edit-draft-values/port.ts"),
+    "../port",
+    true,
+  );
+  const rejectedParentRelative = importViolation(
+    join(
+      ROOT,
+      "apps/api/src/contract/application/edit-draft-values/nested/fixture.ts",
+    ),
+    join(
+      ROOT,
+      "apps/api/src/contract/application/read-contract-detail/query.ts",
+    ),
+    "../../read-contract-detail/query",
+    true,
+  );
+  if (
+    allowed ||
+    !forbiddenLayer ||
+    !forbiddenFeature ||
+    !packageLeak ||
+    allowedPasswordContract ||
+    !rejectedPasswordContract ||
+    allowedRootWiring ||
+    !rejectedRootWiring ||
+    allowedParentRelative ||
+    !rejectedParentRelative
+  )
     failures.push(
       "architecture fixtures: checker rules are not enforcing required dependency shapes",
     );
