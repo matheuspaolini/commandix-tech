@@ -11,7 +11,7 @@ export type RuntimeEnvironment = {
 };
 
 export type DatabaseConnectionConfig = {
-  databaseUrl: string;
+  readonly databaseUrl: string;
 };
 
 export class RuntimeConfig {
