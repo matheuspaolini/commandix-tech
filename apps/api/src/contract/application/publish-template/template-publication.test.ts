@@ -9,6 +9,13 @@ import {
   type TemplatePublicationTransactions,
 } from "@/contract/application/publish-template/template-publication";
 import {
+  LogicalTemplateEntity,
+  LogicalTemplateIdentifier,
+  TemplateVersionEntity,
+  TemplateVersionIdentifier,
+  TenantIdentifier,
+} from "@/contract/domain/entities";
+import {
   canonicalTemplateDefinition,
   InvalidTemplateDefinition,
   type TemplateDefinition,
@@ -18,18 +25,37 @@ const DEFINITION = canonicalTemplateDefinition({
   fields: [{ key: "title", label: "Title", type: "text", required: true }],
 });
 
-const CURRENT: LockedLogicalTemplate = {
-  id: "logical-template-id",
-  tenantId: "tenant-id",
-  revision: 2,
-  activeVersion: { id: "version-id", definition: DEFINITION },
-};
+function lockedTemplate(
+  definition = DEFINITION,
+  revision = 2,
+): LockedLogicalTemplate {
+  const tenantId = TenantIdentifier.from("tenant-id");
+  const logicalTemplateId = LogicalTemplateIdentifier.from(
+    "logical-template-id",
+  );
+  return {
+    logicalTemplate: LogicalTemplateEntity.reconstitute({
+      id: logicalTemplateId,
+      tenantId,
+      revision,
+      activeVersionId: TemplateVersionIdentifier.from("version-id"),
+    }),
+    activeVersion: TemplateVersionEntity.reconstitute({
+      id: TemplateVersionIdentifier.from("version-id"),
+      logicalTemplateId,
+      tenantId,
+      definition,
+    }),
+  };
+}
+
+const CURRENT = lockedTemplate();
 
 class StubTransaction implements TemplatePublicationTransaction {
   persistence: "NONE" | "CREATED" | "PUBLISHED" = "NONE";
 
   constructor(
-    private readonly current: LockedLogicalTemplate | null,
+    readonly current: LockedLogicalTemplate | null,
     private readonly tenantExists = true,
   ) {}
 
@@ -42,31 +68,24 @@ class StubTransaction implements TemplatePublicationTransaction {
   }
 
   async createInitial(input: {
-    tenantId: string;
-    definition: TemplateDefinition;
+    logicalTemplate: LogicalTemplateEntity;
+    version: TemplateVersionEntity;
   }): Promise<ActiveTemplate> {
     this.persistence = "CREATED";
     return {
-      logicalTemplateId: "created-template-id",
-      templateVersionId: "created-version-id",
-      revision: 1,
-      fields: [...input.definition.fields],
+      ...input.logicalTemplate.activeTemplate(),
+      fields: input.version.definitionForPresentation().fields,
     };
   }
 
   async publishNext(input: {
-    logicalTemplateId: string;
-    tenantId: string;
-    previousRevision: number;
-    nextRevision: number;
-    definition: TemplateDefinition;
+    logicalTemplate: LogicalTemplateEntity;
+    version: TemplateVersionEntity;
   }): Promise<ActiveTemplate> {
     this.persistence = "PUBLISHED";
     return {
-      logicalTemplateId: input.logicalTemplateId,
-      templateVersionId: "next-version-id",
-      revision: input.nextRevision,
-      fields: [...input.definition.fields],
+      ...input.logicalTemplate.activeTemplate(),
+      fields: input.version.definitionForPresentation().fields,
     };
   }
 }
@@ -86,7 +105,12 @@ function execute(
   expectedRevision: number,
   definition: unknown = DEFINITION,
 ) {
-  return new PutActiveTemplate(new StubTransactions(transaction)).execute({
+  const ids = transaction.current
+    ? ["next-version-id"]
+    : ["created-version-id", "created-template-id"];
+  return new PutActiveTemplate(new StubTransactions(transaction), {
+    next: () => ids.shift()!,
+  }).execute({
     tenantId: "tenant-id",
     actorId: "actor-id",
     expectedRevision,
@@ -142,24 +166,20 @@ describe("PutActiveTemplate", () => {
   });
 
   test("returns the stored order without persistence for semantic equality", async () => {
-    const current: LockedLogicalTemplate = {
-      ...CURRENT,
-      activeVersion: {
-        ...CURRENT.activeVersion,
-        definition: canonicalTemplateDefinition({
-          fields: [
-            ...DEFINITION.fields,
-            {
-              key: "category",
-              label: "Category",
-              type: "enum",
-              required: false,
-              options: ["Standard", "Custom"],
-            },
-          ],
-        }),
-      },
-    };
+    const current = lockedTemplate(
+      canonicalTemplateDefinition({
+        fields: [
+          ...DEFINITION.fields,
+          {
+            key: "category",
+            label: "Category",
+            type: "enum",
+            required: false,
+            options: ["Standard", "Custom"],
+          },
+        ],
+      }),
+    );
     const transaction = new StubTransaction(current);
     const reordered = {
       fields: [
@@ -181,8 +201,8 @@ describe("PutActiveTemplate", () => {
       result: {
         outcome: "UNCHANGED",
         template: {
-          logicalTemplateId: current.id,
-          templateVersionId: current.activeVersion.id,
+          logicalTemplateId: current.logicalTemplate.id.value,
+          templateVersionId: current.activeVersion.id.value,
           revision: 2,
           fields: current.activeVersion.definition.fields,
         },
@@ -206,7 +226,7 @@ describe("PutActiveTemplate", () => {
       result: {
         outcome: "PUBLISHED",
         template: {
-          logicalTemplateId: CURRENT.id,
+          logicalTemplateId: CURRENT.logicalTemplate.id.value,
           templateVersionId: "next-version-id",
           revision: 3,
           fields: changed.fields,

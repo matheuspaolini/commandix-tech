@@ -4,15 +4,17 @@ import {
   templateDefinitionsEqual,
   type TemplateDefinition,
 } from "@/contract/domain/template-definition";
+import {
+  LogicalTemplateEntity,
+  LogicalTemplateIdentifier,
+  TemplateVersionEntity,
+  TemplateVersionIdentifier,
+  TenantIdentifier,
+} from "@/contract/domain/entities";
 
 export type LockedLogicalTemplate = {
-  id: string;
-  tenantId: string;
-  revision: number;
-  activeVersion: {
-    id: string;
-    definition: TemplateDefinition;
-  };
+  logicalTemplate: LogicalTemplateEntity;
+  activeVersion: TemplateVersionEntity;
 };
 
 export interface TemplatePublicationTransaction {
@@ -21,15 +23,12 @@ export interface TemplatePublicationTransaction {
     tenantId: string,
   ): Promise<LockedLogicalTemplate | null>;
   createInitial(input: {
-    tenantId: string;
-    definition: TemplateDefinition;
+    logicalTemplate: LogicalTemplateEntity;
+    version: TemplateVersionEntity;
   }): Promise<ActiveTemplate>;
   publishNext(input: {
-    logicalTemplateId: string;
-    tenantId: string;
-    previousRevision: number;
-    nextRevision: number;
-    definition: TemplateDefinition;
+    logicalTemplate: LogicalTemplateEntity;
+    version: TemplateVersionEntity;
   }): Promise<ActiveTemplate>;
 }
 
@@ -55,8 +54,19 @@ export type PutActiveTemplateResult = {
 
 export class TemplateRevisionConflict extends Error {}
 
+export interface TemplatePublicationIdGenerator {
+  next(): string;
+}
+
+const UUIDS: TemplatePublicationIdGenerator = {
+  next: () => crypto.randomUUID(),
+};
+
 export class PutActiveTemplate {
-  constructor(private readonly transactions: TemplatePublicationTransactions) {}
+  constructor(
+    private readonly transactions: TemplatePublicationTransactions,
+    private readonly ids: TemplatePublicationIdGenerator = UUIDS,
+  ) {}
 
   execute(command: PutActiveTemplateCommand): Promise<PutActiveTemplateResult> {
     return this.transactions.run(async (transaction) => {
@@ -71,9 +81,21 @@ export class PutActiveTemplate {
 
       const definition = canonicalTemplateDefinition(command.definition);
       if (!current) {
-        const template = await transaction.createInitial({
-          tenantId: command.tenantId,
+        const tenantId = TenantIdentifier.from(command.tenantId);
+        const version = TemplateVersionEntity.create({
+          id: TemplateVersionIdentifier.from(this.ids.next()),
+          logicalTemplateId: LogicalTemplateIdentifier.from(this.ids.next()),
+          tenantId,
           definition,
+        });
+        const logicalTemplate = LogicalTemplateEntity.create({
+          id: version.logicalTemplateId,
+          tenantId,
+          activeVersionId: version.id,
+        });
+        const template = await transaction.createInitial({
+          logicalTemplate,
+          version,
         });
         return { outcome: "CREATED", template };
       }
@@ -84,12 +106,16 @@ export class PutActiveTemplate {
         return { outcome: "UNCHANGED", template: activeTemplate(current) };
       }
 
-      const template = await transaction.publishNext({
-        logicalTemplateId: current.id,
-        tenantId: current.tenantId,
-        previousRevision: current.revision,
-        nextRevision: current.revision + 1,
+      const version = TemplateVersionEntity.create({
+        id: TemplateVersionIdentifier.from(this.ids.next()),
+        logicalTemplateId: current.logicalTemplate.id,
+        tenantId: current.logicalTemplate.tenantId,
         definition,
+      });
+      const logicalTemplate = current.logicalTemplate.publish(version.id);
+      const template = await transaction.publishNext({
+        logicalTemplate,
+        version,
       });
       return { outcome: "PUBLISHED", template };
     });
@@ -101,15 +127,13 @@ function revisionMatches(
   expectedRevision: number,
 ): boolean {
   return current
-    ? expectedRevision === current.revision
+    ? expectedRevision === current.logicalTemplate.revision
     : expectedRevision === 0;
 }
 
 function activeTemplate(current: LockedLogicalTemplate): ActiveTemplate {
   return {
-    logicalTemplateId: current.id,
-    templateVersionId: current.activeVersion.id,
-    revision: current.revision,
+    ...current.logicalTemplate.activeTemplate(),
     fields: current.activeVersion.definition.fields,
   };
 }

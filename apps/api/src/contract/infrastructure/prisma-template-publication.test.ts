@@ -5,6 +5,10 @@ import { PrismaTemplatePublicationTransactions } from "@/contract/infrastructure
 import { PrismaSeedWorkspaceRepository } from "@/contract/infrastructure/prisma-seed-workspace.repository";
 import { PutActiveTemplate } from "@/contract/application/publish-template/template-publication";
 import type { DatabaseService } from "@/database";
+import {
+  TemplateVersionEntity,
+  TemplateVersionIdentifier,
+} from "@/contract/domain/entities";
 
 const client = createPrismaClient({
   datasourceUrl: Bun.env.TEST_DATABASE_URL ?? Bun.env.DATABASE_URL ?? "",
@@ -244,11 +248,10 @@ describe("template persistence invariants", () => {
           tenant.id,
         );
         if (!current) throw new Error("Expected a Logical Template");
-        await transaction.publishNext({
-          logicalTemplateId: current.id,
-          tenantId: current.tenantId,
-          previousRevision: current.revision,
-          nextRevision: current.revision + 1,
+        const version = TemplateVersionEntity.create({
+          id: TemplateVersionIdentifier.from(crypto.randomUUID()),
+          logicalTemplateId: current.logicalTemplate.id,
+          tenantId: current.logicalTemplate.tenantId,
           definition: {
             fields: [
               {
@@ -259,6 +262,10 @@ describe("template persistence invariants", () => {
               },
             ],
           },
+        });
+        await transaction.publishNext({
+          logicalTemplate: current.logicalTemplate.publish(version.id),
+          version,
         });
         throw new Error("injected publication failure");
       }),

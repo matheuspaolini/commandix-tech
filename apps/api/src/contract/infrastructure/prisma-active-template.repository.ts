@@ -6,6 +6,13 @@ import type {
   ActiveTemplateRepository,
 } from "@/contract/application/publish-template/active-template.repository";
 import { canonicalTemplateDefinition } from "@/contract/domain/template-definition";
+import {
+  LogicalTemplateEntity,
+  LogicalTemplateIdentifier,
+  TemplateVersionEntity,
+  TemplateVersionIdentifier,
+  TenantIdentifier,
+} from "@/contract/domain/entities";
 
 @Injectable()
 export class PrismaActiveTemplateRepository implements ActiveTemplateRepository {
@@ -23,14 +30,24 @@ export class PrismaActiveTemplateRepository implements ActiveTemplateRepository 
       });
     if (!logicalTemplate?.activeVersion) return null;
 
-    const definition = canonicalTemplateDefinition(
-      logicalTemplate.activeVersion.definition,
-    );
-    return {
-      logicalTemplateId: logicalTemplate.id,
-      templateVersionId: logicalTemplate.activeVersion.id,
+    const tenant = TenantIdentifier.from(tenantId);
+    const version = TemplateVersionEntity.reconstitute({
+      id: TemplateVersionIdentifier.from(logicalTemplate.activeVersion.id),
+      logicalTemplateId: LogicalTemplateIdentifier.from(logicalTemplate.id),
+      tenantId: tenant,
+      definition: canonicalTemplateDefinition(
+        logicalTemplate.activeVersion.definition,
+      ),
+    });
+    const template = LogicalTemplateEntity.reconstitute({
+      id: LogicalTemplateIdentifier.from(logicalTemplate.id),
+      tenantId: tenant,
       revision: logicalTemplate.revision,
-      fields: definition.fields,
+      activeVersionId: version.id,
+    });
+    return {
+      ...template.activeTemplate(),
+      fields: version.definitionForPresentation().fields,
     };
   }
 }
