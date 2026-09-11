@@ -1,10 +1,15 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test";
-import { createPrismaClient } from "@commandix/database";
+import { createPrismaClient, PrismaClient } from "@commandix/database";
 
+import { PrismaTemplatePublicationTransactions } from "../src/contract/prisma-template-publication";
 import { PrismaSeedWorkspaceRepository } from "../src/contract/prisma-seed-workspace.repository";
+import { PutActiveTemplate } from "../src/contract/template-publication";
 import type { DatabaseService } from "../src/database";
 
 const client = createPrismaClient();
+const cleanupClient = Bun.env.TEST_DATABASE_URL
+  ? new PrismaClient({ datasourceUrl: Bun.env.TEST_DATABASE_URL })
+  : null;
 let acmeTenantId: string;
 let globexTenantId: string;
 let acmeLogicalTemplateId: string;
@@ -35,8 +40,39 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await client.$disconnect();
+  await Promise.all([client.$disconnect(), cleanupClient?.$disconnect()]);
 });
+
+const PUBLICATION_DEFINITION = {
+  fields: [{ key: "title", label: "Title", type: "text", required: true }],
+};
+
+function publicationService() {
+  const transactions = new PrismaTemplatePublicationTransactions({
+    client,
+  } as DatabaseService);
+  return { transactions, service: new PutActiveTemplate(transactions) };
+}
+
+async function removePublishedTenant(tenantId: string) {
+  if (!cleanupClient) throw new Error("Missing TEST_DATABASE_URL");
+  await cleanupClient.logicalTemplate.updateMany({
+    where: { tenantId },
+    data: { activeVersionId: null },
+  });
+  await cleanupClient.$executeRawUnsafe(
+    'ALTER TABLE "template_versions" DISABLE TRIGGER template_versions_immutable',
+  );
+  try {
+    await cleanupClient.templateVersion.deleteMany({ where: { tenantId } });
+  } finally {
+    await cleanupClient.$executeRawUnsafe(
+      'ALTER TABLE "template_versions" ENABLE TRIGGER template_versions_immutable',
+    );
+  }
+  await client.logicalTemplate.deleteMany({ where: { tenantId } });
+  await client.tenant.delete({ where: { id: tenantId } });
+}
 
 async function outcome(operation: () => Promise<unknown>) {
   try {
@@ -150,5 +186,96 @@ describe("template persistence invariants", () => {
     await client.tenant.delete({ where: { id: tenant.id } });
 
     expect(persisted).toBe(0);
+  });
+
+  test("serializes concurrent first publication with the Tenant row", async () => {
+    const slug = `publication-${Bun.randomUUIDv7().replaceAll("-", "")}`;
+    const tenant = await client.tenant.create({ data: { slug } });
+    const { service } = publicationService();
+    const results = await Promise.allSettled([
+      service.execute({
+        tenantId: tenant.id,
+        actorId: Bun.randomUUIDv7(),
+        expectedRevision: 0,
+        definition: PUBLICATION_DEFINITION,
+      }),
+      service.execute({
+        tenantId: tenant.id,
+        actorId: Bun.randomUUIDv7(),
+        expectedRevision: 0,
+        definition: PUBLICATION_DEFINITION,
+      }),
+    ]);
+    const persisted = await client.logicalTemplate.findUnique({
+      where: { tenantId: tenant.id },
+      include: { versions: true },
+    });
+    await removePublishedTenant(tenant.id);
+
+    expect({
+      results: results.map(({ status }) => status).sort(),
+      revision: persisted?.revision,
+      versionCount: persisted?.versions.length,
+      hasActiveVersion: Boolean(persisted?.activeVersionId),
+    }).toStrictEqual({
+      results: ["fulfilled", "rejected"],
+      revision: 1,
+      versionCount: 1,
+      hasActiveVersion: true,
+    });
+  });
+
+  test("rolls back an interrupted subsequent publication", async () => {
+    const slug = `publish-rollback-${Bun.randomUUIDv7().replaceAll("-", "")}`;
+    const tenant = await client.tenant.create({ data: { slug } });
+    const { service, transactions } = publicationService();
+    await service.execute({
+      tenantId: tenant.id,
+      actorId: Bun.randomUUIDv7(),
+      expectedRevision: 0,
+      definition: PUBLICATION_DEFINITION,
+    });
+    await outcome(() =>
+      transactions.run(async (transaction) => {
+        await transaction.lockTenant(tenant.id);
+        const current = await transaction.findLogicalTemplateForUpdate(
+          tenant.id,
+        );
+        if (!current) throw new Error("Expected a Logical Template");
+        await transaction.publishNext({
+          logicalTemplateId: current.id,
+          tenantId: current.tenantId,
+          previousRevision: current.revision,
+          nextRevision: current.revision + 1,
+          definition: {
+            fields: [
+              {
+                key: "title",
+                label: "Document title",
+                type: "text",
+                required: true,
+              },
+            ],
+          },
+        });
+        throw new Error("injected publication failure");
+      }),
+    );
+    const persisted = await client.logicalTemplate.findUniqueOrThrow({
+      where: { tenantId: tenant.id },
+      include: { versions: true },
+    });
+    await removePublishedTenant(tenant.id);
+
+    expect({
+      revision: persisted.revision,
+      versionCount: persisted.versions.length,
+      activeVersionIsFirst:
+        persisted.activeVersionId === persisted.versions[0]?.id,
+    }).toStrictEqual({
+      revision: 1,
+      versionCount: 1,
+      activeVersionIsFirst: true,
+    });
   });
 });

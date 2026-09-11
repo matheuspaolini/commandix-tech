@@ -175,6 +175,44 @@ curl -i http://localhost:8080/api/templates/active \
   -H "authorization: Bearer $token"
 ```
 
+An Admin creates the first Template for an onboarded Tenant with expected revision
+`0`. The response is `200` with `outcome: "CREATED"`, revision `1`, and the new
+logical-Template and immutable-version IDs:
+
+```sh
+curl -i http://localhost:8080/api/onboarding \
+  -H 'content-type: application/json' \
+  --data '{"slug":"template-demo","email":"admin@template-demo.test","password":"Commandix-demo-2026!"}'
+template_token=$(curl -s -c template-cookies.txt http://localhost:8080/api/auth/sign-in \
+  -H 'content-type: application/json' \
+  --data '{"slug":"template-demo","email":"admin@template-demo.test","password":"Commandix-demo-2026!"}' \
+  | bun -e 'console.log((await Bun.stdin.json()).accessToken)')
+curl -i -X PUT http://localhost:8080/api/templates/active \
+  -H "authorization: Bearer $template_token" \
+  -H 'content-type: application/json' \
+  --data '{"expectedRevision":0,"definition":{"fields":[{"key":"title","label":"Title","type":"text","required":true},{"key":"category","label":"Category","type":"enum","required":false,"options":["Standard","Custom"]}]}}'
+```
+
+Use `GET /templates/active` to obtain the current revision, then submit that
+revision to publish a changed immutable version:
+
+```sh
+curl -i -X PUT http://localhost:8080/api/templates/active \
+  -H "authorization: Bearer $template_token" \
+  -H 'content-type: application/json' \
+  --data '{"expectedRevision":1,"definition":{"fields":[{"key":"title","label":"Document title","type":"text","required":true},{"key":"category","label":"Category","type":"enum","required":false,"options":["Standard","Custom"]}]}}'
+```
+
+A changed definition returns `outcome: "PUBLISHED"` and advances the revision
+once. Reusing the stale revision returns `409 TEMPLATE_REVISION_CONFLICT`, even
+when the submitted definition is invalid or would otherwise be unchanged. A
+current, semantically unchanged definition returns `outcome: "UNCHANGED"` with
+the same revision and version ID and performs no writes. Equality ignores field
+and enum-option order; the unchanged response retains the active version's stored
+presentation order. Invalid definitions return `400 INVALID_TEMPLATE_DEFINITION`.
+Members receive `403` for this operation, and tenant scope always comes from the
+verified access token.
+
 Both roles can create a revision-one Draft from that active Template version.
 Defaults apply only to omitted values, preserving explicit `false`, `0`, and
 valid empty text:

@@ -15,7 +15,9 @@ export type PublicErrorBody = {
     | "INVALID_PAGINATION"
     | "CONTRACT_NOT_FOUND"
     | "CONTRACT_REVISION_CONFLICT"
-    | "CONTRACT_STATUS_CONFLICT";
+    | "CONTRACT_STATUS_CONFLICT"
+    | "INVALID_TEMPLATE_DEFINITION"
+    | "TEMPLATE_REVISION_CONFLICT";
   issues?: { key?: string; code: string }[];
 };
 

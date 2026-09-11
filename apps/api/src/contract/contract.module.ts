@@ -30,6 +30,12 @@ import {
   CONTRACT_HISTORY_REPOSITORY,
   ReadContractHistory,
 } from "./read-contract-history";
+import { PrismaTemplatePublicationTransactions } from "./prisma-template-publication";
+import {
+  PutActiveTemplate,
+  TEMPLATE_PUBLICATION_TRANSACTIONS,
+} from "./template-publication";
+import { TemplatePublicationLogger } from "./template-publication.logger";
 
 @Module({
   imports: [AuthModule],
@@ -38,8 +44,10 @@ import {
     RolesGuard,
     ContractCreationLogger,
     ContractTransitionLogger,
+    TemplatePublicationLogger,
     PrismaContractMutationTransactions,
     PrismaContractCreationTransactions,
+    PrismaTemplatePublicationTransactions,
     PrismaContractDetailRepository,
     PrismaContractRegisterRepository,
     PrismaContractHistoryRepository,
@@ -60,6 +68,15 @@ import {
     {
       provide: CONTRACT_CREATION_TRANSACTIONS,
       useExisting: PrismaContractCreationTransactions,
+    },
+    {
+      provide: TEMPLATE_PUBLICATION_TRANSACTIONS,
+      useExisting: PrismaTemplatePublicationTransactions,
+    },
+    {
+      provide: PutActiveTemplate,
+      useFactory: (transactions) => new PutActiveTemplate(transactions),
+      inject: [TEMPLATE_PUBLICATION_TRANSACTIONS],
     },
     {
       provide: CreateContract,
