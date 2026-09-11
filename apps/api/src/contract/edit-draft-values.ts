@@ -7,6 +7,12 @@ import {
 import type { ContractSnapshot } from "./contract-snapshot";
 import { contractValuesEqual, resolveDraftEditValues } from "./contract-values";
 import type { ContractDetail } from "./read-contract-detail";
+import {
+  ContractEntity,
+  ContractIdentifier,
+  TemplateVersionIdentifier,
+  TenantIdentifier,
+} from "./domain/entities";
 
 export {
   ContractNotFound,
@@ -63,7 +69,17 @@ export class EditDraftValues {
       };
       if (contractValuesEqual(current.values, values)) return currentDetail;
 
-      const revision = current.revision + 1;
+      const next = ContractEntity.reconstitute({
+        id: ContractIdentifier.from(current.id),
+        tenantId: TenantIdentifier.from(current.tenantId),
+        templateVersionId: TemplateVersionIdentifier.from(
+          current.templateVersion.id,
+        ),
+        status: current.status,
+        revision: current.revision,
+        values: current.values,
+      }).withDraftValues(values);
+      const revision = next.revision;
       const occurredAt = this.clock.now();
       const before: ContractSnapshot = {
         status: current.status,

@@ -5,6 +5,12 @@ import {
 import type { ContractMutationTransactions } from "./contract-mutation";
 import type { ContractSnapshot } from "./contract-snapshot";
 import {
+  ContractEntity,
+  ContractIdentifier,
+  TemplateVersionIdentifier,
+  TenantIdentifier,
+} from "./domain/entities";
+import {
   ContractNotFound,
   ContractRevisionConflict,
   ContractStatusConflict,
@@ -21,9 +27,17 @@ export class ContractLifecycle {
   constructor(readonly status: ContractStatus) {}
 
   transitionTo(target: ContractStatus): TransitionTarget {
-    if (this.status === "DRAFT" && target === "ACTIVE") return "ACTIVE";
-    if (this.status === "ACTIVE" && target === "CLOSED") return "CLOSED";
-    throw new ContractStatusConflict();
+    const transitioned = ContractEntity.reconstitute({
+      id: ContractIdentifier.from("lifecycle"),
+      tenantId: TenantIdentifier.from("lifecycle"),
+      templateVersionId: TemplateVersionIdentifier.from("lifecycle"),
+      status: this.status,
+      revision: 1,
+      values: {},
+    }).transitionTo(target).status;
+    if (transitioned !== "ACTIVE" && transitioned !== "CLOSED")
+      throw new Error("Contract transition produced an invalid target");
+    return transitioned;
   }
 }
 
@@ -68,10 +82,18 @@ export class TransitionStatus {
       if (!current) throw new ContractNotFound();
       if (current.revision !== command.expectedRevision)
         throw new ContractRevisionConflict();
-      const status = new ContractLifecycle(current.status).transitionTo(
-        command.targetStatus,
-      );
-      const revision = current.revision + 1;
+      const next = ContractEntity.reconstitute({
+        id: ContractIdentifier.from(current.id),
+        tenantId: TenantIdentifier.from(current.tenantId),
+        templateVersionId: TemplateVersionIdentifier.from(
+          current.templateVersion.id,
+        ),
+        status: current.status,
+        revision: current.revision,
+        values: current.values,
+      }).transitionTo(command.targetStatus);
+      const status = next.status;
+      const revision = next.revision;
       const occurredAt = this.clock.now();
       const historyId = this.ids.next();
       const before: ContractSnapshot = {
@@ -112,6 +134,8 @@ export class TransitionStatus {
         });
         return { targetStatus: "CLOSED", contract };
       }
+      if (status !== "ACTIVE")
+        throw new Error("Contract transition produced an invalid target");
 
       const eventId = this.ids.next();
       await transaction.persistActivation({

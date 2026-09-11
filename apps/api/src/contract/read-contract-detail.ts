@@ -1,10 +1,11 @@
 import type { ContractValues } from "./contract-values";
 import type { TemplateDefinition } from "./template-definition";
 import { ContractNotFound } from "./contract-errors";
+import type { ContractStatus } from "./domain/entities";
 
 export { ContractNotFound } from "./contract-errors";
 
-export type ContractStatus = "DRAFT" | "ACTIVE" | "CLOSED";
+export type { ContractStatus } from "./domain/entities";
 
 export type ContractDetailRecord = {
   id: string;
