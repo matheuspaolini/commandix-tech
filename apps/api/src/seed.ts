@@ -1,4 +1,4 @@
-import { BunPasswordHasher } from "./auth/password";
+import { BunPasswordHasher } from "./platform/password-hasher";
 import { canonicalTemplateDefinition } from "./contract/template-definition";
 import { PrismaSeedWorkspaceRepository } from "./contract/prisma-seed-workspace.repository";
 import { SeedWorkspaces } from "./contract/seed-workspaces";

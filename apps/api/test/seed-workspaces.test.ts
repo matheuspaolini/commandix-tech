@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { PasswordHasher } from "../src/auth/password";
+import type { PasswordHasher } from "../src/platform/password-hasher";
 import {
   type SeedWorkspaceRepository,
   SeedWorkspaces,

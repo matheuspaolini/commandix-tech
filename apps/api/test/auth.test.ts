@@ -5,7 +5,10 @@ import {
   type AccessTokenClaims,
   type AccessTokenSubject,
 } from "../src/auth/access-token";
-import { BunPasswordHasher, type PasswordHasher } from "../src/auth/password";
+import {
+  BunPasswordHasher,
+  type PasswordHasher,
+} from "../src/platform/password-hasher";
 import type { CreatedIdentity } from "../src/auth/repository";
 import {
   canonicalIdentity,

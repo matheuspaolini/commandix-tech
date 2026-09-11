@@ -1,4 +1,4 @@
-import type { PasswordHasher } from "../auth/password";
+import type { PasswordHasher } from "../platform/password-hasher";
 import { canonicalIdentity, type Role } from "../tenant/identity";
 import type { TemplateDefinition } from "./template-definition";
 
