@@ -23,10 +23,7 @@ import {
   RabbitMqHealthProbe,
 } from "@/platform/health-probes";
 import { HttpRequestLogger, type LogWriter } from "@/platform/http";
-import {
-  RuntimeConfig,
-  RuntimeConfigModule,
-} from "@/platform/runtime-config";
+import { RuntimeConfig, RuntimeConfigModule } from "@/platform/runtime-config";
 import { TenantModule } from "@/modules/tenant/tenant.module";
 import { PlatformSecurityModule } from "@/platform/password-hasher";
 

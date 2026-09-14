@@ -90,7 +90,8 @@ function confirmedPublish(
     const onReturn = (message: Message) => {
       if (message.properties.messageId === event.eventId) returned = true;
     };
-    const onClose = () => finish({ outcome: "failed", reason: "CONNECTION_LOST" });
+    const onClose = () =>
+      finish({ outcome: "failed", reason: "CONNECTION_LOST" });
     const timer = setTimeout(
       () => finish({ outcome: "failed", reason: "CONFIRM_TIMEOUT" }),
       timeoutMs,
